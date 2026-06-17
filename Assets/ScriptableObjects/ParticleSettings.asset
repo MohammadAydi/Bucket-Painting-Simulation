@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 28fa03c07c6944b19237a75ee25d8289, type: 3}
+  m_Name: ParticleSettings
+  m_EditorClassIdentifier: Assembly-CSharp::ParticleSettings
+  particleCount: 153
+  radius: 0.226
+  segments: 32
+  color: {r: 0.2, g: 0.6, b: 1, a: 0.85}
+  useVertexColor: 0
+  particleSpacing: 0.01

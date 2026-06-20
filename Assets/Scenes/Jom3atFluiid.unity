@@ -155,8 +155,8 @@ Camera:
   m_GameObject: {fileID: 106013979}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_ClearFlags: 2
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -180,7 +180,7 @@ Camera:
   near clip plane: 0.3
   far clip plane: 1000
   field of view: 60
-  orthographic: 0
+  orthographic: 1
   orthographic size: 5
   m_Depth: -1
   m_CullingMask:
@@ -206,7 +206,7 @@ Transform:
   m_GameObject: {fileID: 106013979}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalPosition: {x: 0, y: 0.42, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -393,6 +393,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1768178671}
   - component: {fileID: 1768178670}
+  - component: {fileID: 1768178672}
   - component: {fileID: 1768178669}
   m_Layer: 0
   m_Name: Simultaion
@@ -414,10 +415,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::JParticleDisplay2D
   mesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
-  shader: {fileID: 0}
-  col: {r: 0, g: 0, b: 0, a: 0}
-  scale: 0
-  mat: {fileID: 0}
+  shader: {fileID: 4800000, guid: 88ba2b408fbb46e0b28fb4a565547e46, type: 3}
+  scale: 0.08
   bounds:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 0, y: 0, z: 0}
@@ -434,8 +433,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Jom3atSimulation3D
   gravity: 9.81
-  collisionDamping: 0.05
-  smoothingRadius: 0.2
+  collisionDamping: 0.722
+  boundsSize: {x: 17.4, y: 9}
+  compute: {fileID: 7200000, guid: 18d115878c6540bcb11eee9400c1a876, type: 3}
+  spawner: {fileID: 1768178672}
+  display: {fileID: 1768178669}
 --- !u!4 &1768178671
 Transform:
   m_ObjectHideFlags: 0
@@ -451,6 +453,24 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1768178672
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1768178668}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec17f0218d4617044b5f2b6e04968ab6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: '::'
+  particleCount: 1000
+  initialVelocity: {x: 0, y: 0}
+  spawnCentre: {x: 0, y: 0}
+  spawnSize: {x: 9.26, y: 7}
+  jitterStr: 0.025
+  showSpawnBoundsGizmos: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

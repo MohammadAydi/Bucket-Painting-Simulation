@@ -59,14 +59,7 @@ public class SphericalPendulum : MonoBehaviour
     [Header("Integration")]
     [Tooltip("Fixed physics sub-step (s). Smaller = more accurate, more CPU.")]
     [SerializeField, Min(0.0001f)] private float fixedStep = 0.004f;
-
-    [Header("Live Readout (runtime, read-only)")]
-    [SerializeField] private float outElapsedTime;
-    [SerializeField] private float outSpeed;         
-    [SerializeField] private int   outSwings;
-    [SerializeField] private int   outRevolutions;
-    [SerializeField] private float outThetaDeg;
- 
+    
     private double th, ph, thDot, phDot;
     private double accumulator;
     private double prevThDot, ph0;
@@ -125,8 +118,7 @@ public class SphericalPendulum : MonoBehaviour
                 if (maxSwings > 0 && swingCount >= maxSwings) { running = false; accumulator = 0; break; }
             }
         }
-        RenderPendulum();
-        UpdateReadout();
+        RenderPendulum(); 
     }
 
     // -------------------- Physics --------------------
@@ -175,19 +167,16 @@ public class SphericalPendulum : MonoBehaviour
             swingCount++;
         prevThDot = thDot;
     }
- 
 
     private void RenderPendulum()
     {
         Vector3 bobPos = pivot.position + SphericalToCartesian(th, ph, length);
         bob.position = bobPos;
 
-        if (rope != null)
-        {
-            rope.positionCount = 2;
-            rope.SetPosition(0, pivot.position);
-            rope.SetPosition(1, bobPos);
-        }
+        if (!rope) return;
+        rope.positionCount = 2;
+        rope.SetPosition(0, pivot.position);
+        rope.SetPosition(1, bobPos);
     }
  
     private static Vector3 SphericalToCartesian(double theta, double phi, double l)
@@ -198,15 +187,6 @@ public class SphericalPendulum : MonoBehaviour
         float sp = (float)Math.Sin(phi);
         return new Vector3((float)l * s * cp, -(float)l * c, -(float)l * s * sp);
     }
-
-    private void UpdateReadout()
-    {
-        outElapsedTime = elapsedTime;
-        outSpeed       = SpeedMetersPerSecond;
-        outSwings      = swingCount;
-        outRevolutions = RevolutionCount;
-        outThetaDeg    = CurrentThetaDegrees;
-    } 
 
     public bool  IsRunning              => running;
     public float ElapsedTime            => elapsedTime;

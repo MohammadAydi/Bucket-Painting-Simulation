@@ -126,7 +126,6 @@ public sealed class PbdRope : MonoBehaviour
         for (int i = 1; i < n - 1; i++)
             invMass[i] = 1f / m;
     }
- 
     private void InitCatenary()
     {
         Vector3 a     = pivot.position;
@@ -192,12 +191,12 @@ public sealed class PbdRope : MonoBehaviour
         if (dist < 1e-7f) return;   
 
         Vector3 nHat    = d / dist;
-        float   C       = dist - segLen;
-        float   dLambda = (-C - alphaTilde * lambda[idx]) / (wSum + alphaTilde);
+        float   c       = dist - segLen;
+        float   dLambda = (-c - alphaTilde * lambda[idx]) / (wSum + alphaTilde);
         lambda[idx] += dLambda;
 
-        pos[a] += invMass[a] * (-nHat) * dLambda;  
-        pos[b] += invMass[b] * ( nHat) * dLambda;   
+        pos[a] += -nHat * (invMass[a] * dLambda);  
+        pos[b] += nHat * (invMass[b] * dLambda);   
     }
  
     private void ClampStretch()

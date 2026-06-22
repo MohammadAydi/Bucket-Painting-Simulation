@@ -1,154 +1,297 @@
 using System;
+using System.Threading.Tasks;
+using Rendering;
 using static UnityEngine.Mathf;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 [ExecuteAlways]
 public class FluidSimulation : MonoBehaviour {
     [Header("References")] public ProceduralParticleRenderer particleRenderer;
+    public ProceduralParticleRenderer densityRenderer;
     public ParticleSettings settings;
+    public ParticlesSpawner particlesSpawner;
+    [SerializeField] Camera cameraRef;
+    private static readonly System.Random _random = new();
 
-    // ── simulation state ────────────────────────────────────────────────────
+
+    [Header("Density Material")] public Material densityMaterial; // drag DensityMaterial here in Inspector
+
+
     Vector2[] _positions;
+    public float[] particleProperty;
     Vector2[] _velocities;
+    float[] _densities;
+
+    public float[] Densities => _densities;
+
 
     float _lastRadius;
+    float _lastSmoothingRadius;
     float _lastParticleSpacing;
+    float _lastSmoothness;
     int _lastCount;
     int _lastSegment;
     Color _lastColor;
+    Color _lastDensityColor;
+    bool _lastShowDensity;
 
-    [Header("References")] public BoundsRenderer boundsRenderer; // drag it in the Inspector
+    public Vector2[] Positions => _positions;
 
-    public float mass = 1f;
+
+    private static readonly int SmoothnessID = Shader.PropertyToID("_Smoothness");
+    private static readonly int SmoothingRadiusID = Shader.PropertyToID("_SmoothingRadius");
+
+
     public float gravity = 9.81f;
-    public float collisionDamping = 0.8f;
 
+    public Vector2 BoundsMin {
+        get {
+            float halfHeight = cameraRef.orthographicSize;
+            float halfWidth = halfHeight * cameraRef.aspect;
 
-// Replace the two fields used in Simulate() and SpawnParticles()
-    private Vector2 BoundsMin => boundsRenderer.BoundsMin;
-    private Vector2 BoundsMax => boundsRenderer.BoundsMax;
+            return new Vector2(
+                cameraRef.transform.position.x - halfWidth,
+                cameraRef.transform.position.y - halfHeight
+            );
+        }
+    }
 
-    private void Awake() {
-        Debug.Log("Awake FluidSimulation");
+    public Vector2 BoundsMax {
+        get {
+            float halfHeight = cameraRef.orthographicSize;
+            float halfWidth = halfHeight * cameraRef.aspect;
+
+            return new Vector2(
+                cameraRef.transform.position.x + halfWidth,
+                cameraRef.transform.position.y + halfHeight
+            );
+        }
+    }
+
+    void Awake() {
+        particlesSpawner = new ParticlesSpawner(settings);
+        if (cameraRef == null)
+            cameraRef = Camera.main;
     }
 
     void Start() {
-        Debug.Log("Starting FluidSimulation");
         particleRenderer = GetComponent<ProceduralParticleRenderer>();
-        boundsRenderer = GetComponent<BoundsRenderer>();
+
         particleRenderer.Initialize(settings);
-        SpawnParticles();
+        densityRenderer?.Initialize(settings);
+
+        _densities = new float[settings.particleCount];
+        _velocities = new Vector2[settings.particleCount];
+        Array.Fill(_velocities, Vector2.zero);
+        (_positions, particleProperty) = particlesSpawner.RandomSpawnParticles(BoundsMin, BoundsMax);
+        particleRenderer.UpdatePositions(_positions);
+        densityRenderer?.UpdatePositions(_positions);
+
+        ApplyDensityVisibility();
+        ApplySmoothness();
 
         _lastRadius = settings.radius;
+        _lastSmoothingRadius = settings.smoothingRadius;
         _lastCount = settings.particleCount;
         _lastColor = settings.color;
+        _lastDensityColor = settings.densityColor;
         _lastParticleSpacing = settings.particleSpacing;
-
-        // Subscribe to inspector changes
+        _lastSmoothness = settings.smoothness;
+        _lastShowDensity = settings.showDensity;
         settings.OnChanged += OnSettingsChanged;
     }
-    
-    void OnValidate()
-    {
-        Debug.Log("OnValidate FluidSimulation");
-        if (Application.isPlaying) {
-            return;
-        }
-        if (settings == null) {
-            return;
-        }
+
+    void OnValidate() {
+        if (Application.isPlaying) return;
+        if (settings == null) return;
+
         if (particleRenderer == null)
             particleRenderer = GetComponent<ProceduralParticleRenderer>();
-        if (boundsRenderer == null)
-            boundsRenderer = GetComponent<BoundsRenderer>();
+
         particleRenderer.Initialize(settings);
-        SpawnParticles();
-        particleRenderer.UpdatePositions(_positions);
+        densityRenderer?.Initialize(settings);
+
+        var result = particlesSpawner?.RandomSpawnParticles(BoundsMin, BoundsMax);
+
+        if (result.HasValue) {
+            (_positions, particleProperty) = result.Value;
+        }
+
+        if (_positions != null) {
+            particleRenderer.UpdatePositions(_positions);
+            densityRenderer?.UpdatePositions(_positions);
+        }
+
+        ApplyDensityVisibility();
+        ApplySmoothness();
     }
 
     void OnDestroy() {
-        Debug.Log("Destroy FluidSimulation");
         settings.OnChanged -= OnSettingsChanged;
     }
-    
 
     void OnSettingsChanged() {
-        Debug.Log("Settings Changed");
         if (_lastCount != settings.particleCount) {
             particleRenderer.Initialize(settings);
-            SpawnParticles();
+            densityRenderer?.Initialize(settings);
+            (_positions, particleProperty) = particlesSpawner.RandomSpawnParticles(BoundsMin, BoundsMax);
             particleRenderer.UpdatePositions(_positions);
+            densityRenderer?.UpdatePositions(_positions);
             _lastCount = settings.particleCount;
         }
-        else if (_lastRadius != settings.radius) {
+
+        if (_lastRadius != settings.radius) {
             particleRenderer.Initialize(settings);
             particleRenderer.UpdatePositions(_positions);
             _lastRadius = settings.radius;
+        }
+
+        if (_lastSmoothingRadius != settings.smoothingRadius) {
+            densityRenderer?.Initialize(settings);
+            densityRenderer?.UpdatePositions(_positions);
+            _lastSmoothingRadius = settings.smoothingRadius;
         }
 
         if (_lastColor != settings.color) {
             particleRenderer.SetColor(settings.color);
             _lastColor = settings.color;
         }
+
+        if (_lastDensityColor != settings.densityColor) {
+            densityRenderer?.SetColor(settings.densityColor);
+            _lastDensityColor = settings.densityColor;
+        }
+
         if (_lastParticleSpacing != settings.particleSpacing) {
-            SpawnParticles();
+            (_positions, particleProperty) = particlesSpawner.RandomSpawnParticles(BoundsMin, BoundsMax);
             particleRenderer.UpdatePositions(_positions);
+            densityRenderer?.UpdatePositions(_positions);
             _lastParticleSpacing = settings.particleSpacing;
         }
 
         if (_lastSegment != settings.segments) {
             particleRenderer.Initialize(settings);
+            densityRenderer?.Initialize(settings);
             particleRenderer.UpdatePositions(_positions);
+            densityRenderer?.UpdatePositions(_positions);
             _lastSegment = settings.segments;
         }
-        
+
+        if (_lastSmoothness != settings.smoothness) {
+            ApplySmoothness();
+            _lastSmoothness = settings.smoothness;
+        }
+
+        if (_lastShowDensity != settings.showDensity) {
+            ApplyDensityVisibility();
+            _lastShowDensity = settings.showDensity;
+        }
     }
 
-    // Update() becomes clean again — no settings checks
     void Update() {
-        if (!Application.isPlaying)
-            return;
+        if (!Application.isPlaying) return;
+        // UpdateDensities();
         Simulate(Time.deltaTime);
         particleRenderer.UpdatePositions(_positions);
+        densityRenderer?.UpdatePositions(_positions);
     }
 
-    // ── runtime controls (wire these to UI sliders) ─────────────────────────
-    public void OnColorChanged(Color c) => particleRenderer.SetColor(c);
-    public void OnRadiusChanged(float r) => particleRenderer.SetRadius(r);
-
-    // ── private ─────────────────────────────────────────────────────────────
-  void SpawnParticles() {
-    int n = settings.particleCount;
-    _positions = new Vector2[n];
-    _velocities = new Vector2[n];
-
-    int particlesPerRow = (int)Sqrt(n);
-    int particlesPerCol = (n - 1) / particlesPerRow + 1;
-    float spacing = settings.radius * 2 + settings.particleSpacing;  // <-- fix
-
-    for (int i = 0; i < n; i++) {
-        float x = (i % particlesPerRow - particlesPerRow / 2f + 0.5f) * spacing;
-        float y = (i / particlesPerRow - particlesPerCol / 2f + 0.5f) * spacing;
-        _positions[i] = new Vector2(x, y);
+    // pushes smoothness value to the density material
+    void ApplySmoothness() {
+        if (densityMaterial != null) {
+            densityMaterial.SetFloat(SmoothnessID, settings.smoothness);
+            densityMaterial.SetFloat(SmoothingRadiusID, settings.smoothingRadius);
+        }
     }
-}
+
+    // shows or hides the density renderer GameObject
+    void ApplyDensityVisibility() {
+        if (densityRenderer != null)
+            densityRenderer.gameObject.SetActive(settings.showDensity);
+    }
+
+
+    void UpdateDensities() {
+        System.Threading.Tasks.Parallel.For(0, _positions.Length, i => {
+            _densities[i] = DensityCalculator.CalculateDensity(
+                _positions[i], _positions, settings.smoothingRadius);
+        });
+    }
+
+
+    float ConvertDensityToPressure(float density) {
+        float densityError = density - settings.targetDensity;
+        float pressure = densityError * settings.pressureMultiplier;
+        return pressure;
+    }
+
+    float SmoothingKernelDerivative(float dst, float radius) {
+        if (dst >= radius) return 0;
+        float f = radius * radius - dst * dst;
+        float scale = -24 / (PI * Pow(radius, 8));
+        return scale * dst * f * f;
+    }
+
+    Vector2 CalculatePressureForce(int particleIndex) {
+        Vector2 pressureForce = Vector2.zero;
+        for (int otherParticleIndex = 0; otherParticleIndex < _positions.Length; otherParticleIndex++) {
+            if(particleIndex == otherParticleIndex) continue;
+            Vector2 offset = _positions[otherParticleIndex] -  _positions[particleIndex];
+            float dst = offset.magnitude;
+            Vector2 dir = dst == 0 ? GetRandomDir() : offset / dst;
+            float slope = SmoothingKernelDerivative(dst, settings.smoothingRadius);
+            float density = _densities[otherParticleIndex];
+            pressureForce += dir * (-ConvertDensityToPressure(density) * slope * settings.mass) / density; // mass = 1
+        }
+
+        return pressureForce;
+        // const float stepSize = 0.001f;
+        // float deltaX = CalculateProperty(samplePoint + float2(0, 1) * stepSize) - CalculateProperty(samplePoint);
+        // float deltaY = CalculateProperty(samplePoint + float2(1, 0) * stepSize) - CalculateProperty(samplePoint);
+        //
+        // float2 gradient = float2(deltaX,deltaY) / stepSize;
+        // return gradient;
+    }
+    
+    private static Vector2 GetRandomDir()
+    {
+        lock (_random)
+        {
+            float angle = (float)(_random.NextDouble() * Math.PI * 2.0);
+            return new Vector2(Cos(angle), Sin(angle));
+        }
+    }
+
+    private void ResolveCollision(ref Vector2 position, ref Vector2 velocity, Vector2 halfBoundsSize) {
+        if (Mathf.Abs(position.x) > halfBoundsSize.x) {
+            position.x = halfBoundsSize.x * Mathf.Sign(position.x);
+            velocity.x *= -settings.collisionDamping;
+        }
+
+        if (Mathf.Abs(position.y) > halfBoundsSize.y) {
+            position.y = halfBoundsSize.y * Mathf.Sign(position.y);
+            velocity.y *= -settings.collisionDamping;
+        }
+    }
 
     void Simulate(float dt) {
-        Vector2 halfBoundsSize = BoundsMax - Vector2.one * _lastRadius;
-        for (int i = 0; i < _positions.Length; i++) {
-            _velocities[i] += Vector2.down * (gravity * dt);
+        Vector2 halfBoundsSize = BoundsMax - Vector2.one * settings.radius;
+        Parallel.For(0, _positions.Length, i => {
+            // _velocities[i] += Vector2.down * (gravity * dt);
+            _densities[i] = DensityCalculator.CalculateDensity(
+                _positions[i], _positions, settings.smoothingRadius);
+        });
+
+        Parallel.For(0, _positions.Length, i => {
+            Vector2 pressureForce = CalculatePressureForce(i);
+            Vector2 PressureAcceleration = -pressureForce / _densities[i];
+            _velocities[i] = PressureAcceleration * dt;
+        });
+
+        Parallel.For(0, _positions.Length, i => {
             _positions[i] += _velocities[i] * dt;
-
-            // Bounce off bounds
-            if (Abs(_positions[i].x) > halfBoundsSize.x) {
-                _positions[i].x = halfBoundsSize.x * Sign(_positions[i].x);
-                _velocities[i].x *= -collisionDamping;
-            }
-
-            if (Abs(_positions[i].y) > halfBoundsSize.y) {
-                _positions[i].y = halfBoundsSize.y * Sign(_positions[i].y);
-                _velocities[i].y *= -collisionDamping;
-            }
-        }
+            ResolveCollision(ref _positions[i], ref _velocities[i], halfBoundsSize);
+        });
     }
 }

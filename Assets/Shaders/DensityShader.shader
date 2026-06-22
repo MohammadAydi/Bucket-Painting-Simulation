@@ -2,8 +2,6 @@ Shader "Fluid/DensityField"
 {
     Properties
     {
-        _TargetDensity ("Target Density", Float) = 2.0
-        _PressureMultiplier ("Pressure Multiplier" , Float) = 2.0
     }
     SubShader
     {
@@ -23,14 +21,11 @@ Shader "Fluid/DensityField"
 
             // particle data passed from C#
             float2 _Positions[700];
-            float _ParticleProperties[700];
-            float _Densities[500];
 
             int _ParticleCount;
             float _Mass;
             float _SmoothingRadius;
             float _TargetDensity;
-            float _PressureMultiplier;
             fixed4 _LowColor;
             fixed4 _TargetColor;
             fixed4 _HighColor;
@@ -64,19 +59,10 @@ Shader "Fluid/DensityField"
             float SmoothingKernel(float radius, float dst)
             {
                 if (dst >= radius) return 0.0;
-                float volume = UNITY_PI * pow(radius, 8) / 4.0;
-                float value = radius * radius - dst * dst;
-                return (value * value * value) / volume;
+                float volume = UNITY_PI * pow(radius, 4) / 6.0;
+                return (radius - dst) * (radius - dst) / volume;
             }
-
-            float SmoothingKernelDerivative(float dst, float radius)
-            {
-                if (dst >= radius) return 0;
-                float f = radius * radius - dst * dst;
-                float scale = -24 / (UNITY_PI * pow(radius, 8));
-                return scale * dst * f * f;
-            }
-
+            
 
             float CalculateDensity(float2 samplePoint)
             {
@@ -104,54 +90,7 @@ Shader "Fluid/DensityField"
                     return lerp(_TargetColor, _HighColor, t);
                 }
             }
-
-            float CalculateProperty(float2 samplePoint)
-            {
-                float property = 0;
-                for (int i = 0; i < _ParticleCount; i++)
-                {
-                    float dst = length(_Positions[i] - samplePoint);
-                    float influence = SmoothingKernel(_SmoothingRadius, dst);
-                    float density = _Densities[i]; // pre-computed, not recalculated
-                    property += _ParticleProperties[i] * influence * _Mass / density;
-                }
-                return property;
-            }
-
-            float ConvertDensityToPressure(float density)
-            {
-                float densityError = density - _TargetDensity;
-                float pressure = densityError * _PressureMultiplier;
-                return pressure;
-            }
             
-            float2 CalculatePressureForce (float2 samplePoint)
-            {
-                float2 pressureForce = float2(0, 0);
-                for (int i = 0; i < _ParticleCount; i++)
-                {
-                    float dst = length(_Positions[i] - samplePoint);
-                    float2 dir = (_Positions[i] - samplePoint) / dst;
-                    float slope = SmoothingKernelDerivative(dst, _SmoothingRadius);
-                    float density = _Densities[i];
-                    pressureForce += -ConvertDensityToPressure(density) * dir * slope * _Mass / density; // mass = 1
-                }
-                return pressureForce;
-                // const float stepSize = 0.001f;
-                // float deltaX = CalculateProperty(samplePoint + float2(0, 1) * stepSize) - CalculateProperty(samplePoint);
-                // float deltaY = CalculateProperty(samplePoint + float2(1, 0) * stepSize) - CalculateProperty(samplePoint);
-                //
-                // float2 gradient = float2(deltaX,deltaY) / stepSize;
-                // return gradient;
-            }
-
-
-            // fixed4 frag(v2f i) : SV_Target
-            // {
-            //     float property = CalculateProperty(i.worldPos);
-            //     return DensityToColor(property);
-            // }
-
             fixed4 frag(v2f i) : SV_Target
             {
                 float density = CalculateDensity(i.worldPos);

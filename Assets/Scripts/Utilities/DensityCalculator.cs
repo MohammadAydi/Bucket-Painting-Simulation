@@ -1,13 +1,13 @@
+using static UnityEngine.Mathf;
 using UnityEngine;
 
 public static class DensityCalculator
 {
-    public static float SmoothingKernel(float radius, float dst)
+    static float SmoothingKernel(float radius, float dst)
     {
-        if (dst >= radius) return 0f;
-        float volume = Mathf.PI * Mathf.Pow(radius, 8) / 4f;
-        float value  = radius * radius - dst * dst;
-        return value * value * value / volume;
+        if (dst >= radius) return 0.0f;
+        float volume = PI * Pow(radius, 4) / 6.0f;
+        return (radius - dst) * (radius - dst) / volume;
     }
 
     public static float CalculateDensity(Vector2 samplePoint, Vector2[] positions, float smoothingRadius)

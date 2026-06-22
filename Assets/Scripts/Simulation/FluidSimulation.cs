@@ -8,14 +8,12 @@ using Random = UnityEngine.Random;
 [ExecuteAlways]
 public class FluidSimulation : MonoBehaviour {
     [Header("References")] public ProceduralParticleRenderer particleRenderer;
-    public ProceduralParticleRenderer densityRenderer;
     public ParticleSettings settings;
     public ParticlesSpawner particlesSpawner;
     [SerializeField] Camera cameraRef;
     private static readonly System.Random _random = new();
 
 
-    [Header("Density Material")] public Material densityMaterial; // drag DensityMaterial here in Inspector
 
 
     Vector2[] _positions;
@@ -37,10 +35,7 @@ public class FluidSimulation : MonoBehaviour {
     bool _lastShowDensity;
 
     public Vector2[] Positions => _positions;
-
-
-    private static readonly int SmoothnessID = Shader.PropertyToID("_Smoothness");
-    private static readonly int SmoothingRadiusID = Shader.PropertyToID("_SmoothingRadius");
+    
 
 
     public float gravity = 9.81f;
@@ -79,17 +74,14 @@ public class FluidSimulation : MonoBehaviour {
         particleRenderer = GetComponent<ProceduralParticleRenderer>();
 
         particleRenderer.Initialize(settings);
-        densityRenderer?.Initialize(settings);
 
         _densities = new float[settings.particleCount];
         _velocities = new Vector2[settings.particleCount];
         Array.Fill(_velocities, Vector2.zero);
         (_positions, particleProperty) = particlesSpawner.RandomSpawnParticles(BoundsMin, BoundsMax);
         particleRenderer.UpdatePositions(_positions);
-        densityRenderer?.UpdatePositions(_positions);
 
         ApplyDensityVisibility();
-        ApplySmoothness();
 
         _lastRadius = settings.radius;
         _lastSmoothingRadius = settings.smoothingRadius;
@@ -110,7 +102,6 @@ public class FluidSimulation : MonoBehaviour {
             particleRenderer = GetComponent<ProceduralParticleRenderer>();
 
         particleRenderer.Initialize(settings);
-        densityRenderer?.Initialize(settings);
 
         var result = particlesSpawner?.RandomSpawnParticles(BoundsMin, BoundsMax);
 
@@ -120,11 +111,10 @@ public class FluidSimulation : MonoBehaviour {
 
         if (_positions != null) {
             particleRenderer.UpdatePositions(_positions);
-            densityRenderer?.UpdatePositions(_positions);
         }
 
         ApplyDensityVisibility();
-        ApplySmoothness();
+     
     }
 
     void OnDestroy() {
@@ -134,10 +124,8 @@ public class FluidSimulation : MonoBehaviour {
     void OnSettingsChanged() {
         if (_lastCount != settings.particleCount) {
             particleRenderer.Initialize(settings);
-            densityRenderer?.Initialize(settings);
             (_positions, particleProperty) = particlesSpawner.RandomSpawnParticles(BoundsMin, BoundsMax);
             particleRenderer.UpdatePositions(_positions);
-            densityRenderer?.UpdatePositions(_positions);
             _lastCount = settings.particleCount;
         }
 
@@ -148,8 +136,6 @@ public class FluidSimulation : MonoBehaviour {
         }
 
         if (_lastSmoothingRadius != settings.smoothingRadius) {
-            densityRenderer?.Initialize(settings);
-            densityRenderer?.UpdatePositions(_positions);
             _lastSmoothingRadius = settings.smoothingRadius;
         }
 
@@ -159,27 +145,23 @@ public class FluidSimulation : MonoBehaviour {
         }
 
         if (_lastDensityColor != settings.densityColor) {
-            densityRenderer?.SetColor(settings.densityColor);
             _lastDensityColor = settings.densityColor;
         }
 
         if (_lastParticleSpacing != settings.particleSpacing) {
             (_positions, particleProperty) = particlesSpawner.RandomSpawnParticles(BoundsMin, BoundsMax);
             particleRenderer.UpdatePositions(_positions);
-            densityRenderer?.UpdatePositions(_positions);
             _lastParticleSpacing = settings.particleSpacing;
         }
 
         if (_lastSegment != settings.segments) {
             particleRenderer.Initialize(settings);
-            densityRenderer?.Initialize(settings);
             particleRenderer.UpdatePositions(_positions);
-            densityRenderer?.UpdatePositions(_positions);
             _lastSegment = settings.segments;
         }
 
         if (_lastSmoothness != settings.smoothness) {
-            ApplySmoothness();
+         
             _lastSmoothness = settings.smoothness;
         }
 
@@ -194,30 +176,13 @@ public class FluidSimulation : MonoBehaviour {
         // UpdateDensities();
         Simulate(Time.deltaTime);
         particleRenderer.UpdatePositions(_positions);
-        densityRenderer?.UpdatePositions(_positions);
     }
-
-    // pushes smoothness value to the density material
-    void ApplySmoothness() {
-        if (densityMaterial != null) {
-            densityMaterial.SetFloat(SmoothnessID, settings.smoothness);
-            densityMaterial.SetFloat(SmoothingRadiusID, settings.smoothingRadius);
-        }
-    }
+    
 
     // shows or hides the density renderer GameObject
     void ApplyDensityVisibility() {
-        if (densityRenderer != null)
-            densityRenderer.gameObject.SetActive(settings.showDensity);
     }
-
-
-    void UpdateDensities() {
-        System.Threading.Tasks.Parallel.For(0, _positions.Length, i => {
-            _densities[i] = DensityCalculator.CalculateDensity(
-                _positions[i], _positions, settings.smoothingRadius);
-        });
-    }
+    
 
 
     float ConvertDensityToPressure(float density) {
@@ -226,38 +191,37 @@ public class FluidSimulation : MonoBehaviour {
         return pressure;
     }
 
+
     float SmoothingKernelDerivative(float dst, float radius) {
         if (dst >= radius) return 0;
-        float f = radius * radius - dst * dst;
-        float scale = -24 / (PI * Pow(radius, 8));
-        return scale * dst * f * f;
+        float scale = 12 / (Pow(radius, 4) * PI);
+        return (dst - radius) * scale;
+    }
+
+    float CalculateSharedPressure(float densityA, float densityB) {
+        float pressureA = ConvertDensityToPressure(densityA);
+        float pressureB = ConvertDensityToPressure(densityB);
+        return (pressureA + pressureB) / 2;
     }
 
     Vector2 CalculatePressureForce(int particleIndex) {
         Vector2 pressureForce = Vector2.zero;
         for (int otherParticleIndex = 0; otherParticleIndex < _positions.Length; otherParticleIndex++) {
-            if(particleIndex == otherParticleIndex) continue;
-            Vector2 offset = _positions[otherParticleIndex] -  _positions[particleIndex];
+            if (particleIndex == otherParticleIndex) continue;
+            Vector2 offset = _positions[otherParticleIndex] - _positions[particleIndex];
             float dst = offset.magnitude;
             Vector2 dir = dst == 0 ? GetRandomDir() : offset / dst;
             float slope = SmoothingKernelDerivative(dst, settings.smoothingRadius);
             float density = _densities[otherParticleIndex];
-            pressureForce += dir * (-ConvertDensityToPressure(density) * slope * settings.mass) / density; // mass = 1
+            float sharedPressure = CalculateSharedPressure(density, _densities[particleIndex]);
+            pressureForce += dir * (sharedPressure * slope * settings.mass) / density; // mass = 1
         }
 
         return pressureForce;
-        // const float stepSize = 0.001f;
-        // float deltaX = CalculateProperty(samplePoint + float2(0, 1) * stepSize) - CalculateProperty(samplePoint);
-        // float deltaY = CalculateProperty(samplePoint + float2(1, 0) * stepSize) - CalculateProperty(samplePoint);
-        //
-        // float2 gradient = float2(deltaX,deltaY) / stepSize;
-        // return gradient;
     }
-    
-    private static Vector2 GetRandomDir()
-    {
-        lock (_random)
-        {
+
+    private static Vector2 GetRandomDir() {
+        lock (_random) {
             float angle = (float)(_random.NextDouble() * Math.PI * 2.0);
             return new Vector2(Cos(angle), Sin(angle));
         }
@@ -285,8 +249,8 @@ public class FluidSimulation : MonoBehaviour {
 
         Parallel.For(0, _positions.Length, i => {
             Vector2 pressureForce = CalculatePressureForce(i);
-            Vector2 PressureAcceleration = -pressureForce / _densities[i];
-            _velocities[i] = PressureAcceleration * dt;
+            Vector2 PressureAcceleration = pressureForce / _densities[i];
+            _velocities[i] += PressureAcceleration * dt;
         });
 
         Parallel.For(0, _positions.Length, i => {

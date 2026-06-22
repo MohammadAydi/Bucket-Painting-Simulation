@@ -31,7 +31,7 @@ public class ParticleSettings : ScriptableObject
     [Range(0f, 1f)]
     public float collisionDamping = 0.8f;
     
-    [Range(0f, 10f)]
+    [Range(0f, 500f)]
     public float pressureMultiplier = 2.0f;
     
     [Range(0f, 10f)]

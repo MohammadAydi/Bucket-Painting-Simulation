@@ -113,8 +113,6 @@ public class GravitySimulation : MonoBehaviour {
     public void OnColorChanged(Color c) => particleRenderer.SetColor(c);
 
     // ── private ─────────────────────────────────────────────────────────────
-
-
     void Simulate(float dt) {
         Vector2 halfBoundsSize = BoundsMax - Vector2.one * _lastRadius;
         for (int i = 0; i < _positions.Length; i++) {

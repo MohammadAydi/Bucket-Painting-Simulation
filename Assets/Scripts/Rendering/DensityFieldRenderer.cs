@@ -15,7 +15,6 @@ public class DensityFieldRenderer : MonoBehaviour {
 
     // cached shader property IDs
     static readonly int PositionsID = Shader.PropertyToID("_Positions");
-    static readonly int ParticlePropertyID = Shader.PropertyToID("_ParticleProperties");
     static readonly int MassID = Shader.PropertyToID("_Mass");
     static readonly int ParticleCountID = Shader.PropertyToID("_ParticleCount");
     static readonly int SmoothingRadID = Shader.PropertyToID("_SmoothingRadius");
@@ -25,12 +24,10 @@ public class DensityFieldRenderer : MonoBehaviour {
     static readonly int HighColorID = Shader.PropertyToID("_HighColor");
     static readonly int BoundsMinID = Shader.PropertyToID("_BoundsMin");
     static readonly int BoundsMaxID = Shader.PropertyToID("_BoundsMax");
-    static readonly int DensitiesID = Shader.PropertyToID("_Densities");
 
 
     // shader needs float4 array — we pack Vector2 positions into Vector4
     Vector4[] _positionsV4 = new Vector4[700];
-    float[] _densitiesBuffer = new float[700];
 
     void Start() {
         Debug.Log("start density field renderer");
@@ -47,19 +44,15 @@ public class DensityFieldRenderer : MonoBehaviour {
         if (densityFieldMaterial is null) return;
 
         Vector2[] positions = fluidSimulation.Positions;
-        float[] densities = fluidSimulation.Densities;
-        int count = Mathf.Min(densities.Length, 700);
+        int count = Mathf.Min(fluidSimulation.Positions.Length, 700);
         float smoothRadius = fluidSimulation.settings.smoothingRadius;
 
         // pack Vector2 → Vector4 (shader arrays must be float4)
         for (int i = 0; i < count; i++) {
             _positionsV4[i] = new Vector4(positions[i].x, positions[i].y, 0f, 0f);
-            _densitiesBuffer[i] = densities[i];
         }
 
         densityFieldMaterial.SetVectorArray(PositionsID, _positionsV4);
-        densityFieldMaterial.SetFloatArray(DensitiesID, _densitiesBuffer);
-        densityFieldMaterial.SetFloatArray(ParticlePropertyID, fluidSimulation.particleProperty);
         densityFieldMaterial.SetInt(ParticleCountID, count);
         densityFieldMaterial.SetFloat(SmoothingRadID, smoothRadius);
         densityFieldMaterial.SetFloat(MassID, fluidSimulation.settings.mass);

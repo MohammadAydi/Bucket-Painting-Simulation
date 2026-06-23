@@ -72,7 +72,7 @@ public class BucketGenerator : MonoBehaviour
         if (meshFilter == null) meshFilter = GetComponent<MeshFilter>();
 
         bucketMesh = new Mesh();
-        bucketMesh.name = "PerfectClosedBucket";
+        bucketMesh.name = "UltimateSolidBucketNoGaps";
 
         List<Vector3> vertices = new List<Vector3>();
         List<int> triangles = new List<int>();
@@ -132,7 +132,7 @@ public class BucketGenerator : MonoBehaviour
             }
         }
 
-        // 2. GENERATE SIDE WALLS + GAPLESS CORNER RIMS
+        // 2. GENERATE SIDE WALLS + SIDE RIMS
         bool[,] sideCutMap = new bool[heightSubdivisions, segments];
         for (int h = 0; h < heightSubdivisions; h++)
         {
@@ -169,34 +169,32 @@ public class BucketGenerator : MonoBehaviour
                 }
                 else
                 {
-                    // Advanced Contour-based Rim Generation to close corners perfectly
-                    if (h == 0 || !sideCutMap[h - 1, i]) // Bottom Border
+                    if (h == 0 || !sideCutMap[h - 1, i])
                     {
                         AddDoubleSidedTriangle(triangles, o_b_curr, o_b_next, i_b_curr);
                         AddDoubleSidedTriangle(triangles, i_b_curr, o_b_next, i_b_next);
                     }
-                    if (h == heightSubdivisions - 1 || !sideCutMap[h + 1, i]) // Top Border
+                    if (h == heightSubdivisions - 1 || !sideCutMap[h + 1, i])
                     {
                         AddDoubleSidedTriangle(triangles, o_t_curr, i_t_curr, o_t_next);
                         AddDoubleSidedTriangle(triangles, o_t_next, i_t_curr, i_t_next);
                     }
                     
                     int prevI = (i == 0) ? segments - 1 : i - 1;
-                    if (!sideCutMap[h, prevI]) // Left Border
+                    if (!sideCutMap[h, prevI])
                     {
                         AddDoubleSidedTriangle(triangles, o_b_curr, o_t_curr, i_b_curr);
                         AddDoubleSidedTriangle(triangles, i_b_curr, o_t_curr, i_t_curr);
                     }
                     
                     int nextI = (i == segments - 1) ? 0 : i + 1;
-                    if (!sideCutMap[h, nextI]) // Right Border
+                    if (!sideCutMap[h, nextI])
                     {
                         AddDoubleSidedTriangle(triangles, o_b_next, i_b_next, o_t_next);
                         AddDoubleSidedTriangle(triangles, o_t_next, i_b_next, i_t_next);
                     }
                 }
 
-                // Main Top Lip of the bucket (Always closed)
                 if (h == heightSubdivisions - 1)
                 {
                     AddDoubleSidedTriangle(triangles, o_t_curr, i_t_curr, o_t_next);
@@ -205,7 +203,7 @@ public class BucketGenerator : MonoBehaviour
             }
         }
 
-        // 3. GENERATE FLOORS
+        // 3. GENERATE FLOORS + FIXED TRIANGLE-LEVEL FLOOR RIMS
         bool[,] floorCutMap = new bool[floorSubdivisions, segments];
         for (int r = 0; r < floorSubdivisions; r++)
         {
@@ -234,6 +232,7 @@ public class BucketGenerator : MonoBehaviour
 
                 if (!floorCutMap[r, i])
                 {
+                    // Draw outer and inner floors normally if not cut
                     triangles.Add(o_f_curr); triangles.Add(o_f_top_curr); triangles.Add(o_f_next);
                     triangles.Add(o_f_next); triangles.Add(o_f_top_curr); triangles.Add(o_f_top_next);
 
@@ -242,29 +241,32 @@ public class BucketGenerator : MonoBehaviour
                 }
                 else
                 {
+                    // CRISIS SOLVED: Every cut cell forces its 4 borders to verify on a triangle-subdivision basis
+                    // 1. Inner Radial Ring Rim
                     if (r == 0 || !floorCutMap[r - 1, i])
                     {
                         AddDoubleSidedTriangle(triangles, o_f_curr, o_f_next, i_f_curr);
                         AddDoubleSidedTriangle(triangles, i_f_curr, o_f_next, i_f_next);
                     }
+                    // 2. Outer Radial Ring Rim
                     if (r == floorSubdivisions - 1 || !floorCutMap[r + 1, i])
                     {
                         AddDoubleSidedTriangle(triangles, o_f_top_curr, i_f_top_curr, o_f_top_next);
                         AddDoubleSidedTriangle(triangles, o_f_top_next, i_f_top_curr, i_f_top_next);
                     }
-                    
+                    // 3. Left Segment Rim
                     int prevI = (i == 0) ? segments - 1 : i - 1;
                     if (!floorCutMap[r, prevI])
                     {
                         AddDoubleSidedTriangle(triangles, o_f_curr, i_f_curr, o_f_top_curr);
                         AddDoubleSidedTriangle(triangles, o_f_top_curr, i_f_curr, i_f_top_curr);
                     }
-                    
+                    // 4. Right Segment Rim
                     int nextI = (i == segments - 1) ? 0 : i + 1;
                     if (!floorCutMap[r, nextI])
                     {
                         AddDoubleSidedTriangle(triangles, o_f_next, o_f_top_next, i_f_next);
-                        AddDoubleSidedTriangle(triangles, o_f_top_next, i_f_top_next, i_f_top_next);
+                        AddDoubleSidedTriangle(triangles, i_f_next, o_f_top_next, i_f_top_next); // FIXED: Forces both halves of the triangle link to snap solid
                     }
                 }
             }

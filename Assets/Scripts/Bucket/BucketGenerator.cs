@@ -17,17 +17,15 @@ public class BucketGenerator : MonoBehaviour
 
     [Header("Mesh Settings")]
     [Range(3, 128)]
-    public int segments = 32;
+    public int segments = 64;
+    [Range(2, 30)]
+    public int heightSubdivisions = 10;
+    [Range(2, 20)]
+    public int floorSubdivisions = 8;
 
     [Header("Compartments (Pizza Slots)")]
-    [Tooltip("Add sections to split the bucket")]
     public List<float> compartmentRatios = new List<float>();
-    
-    [Tooltip("Thickness of the internal divider walls.")]
-    public float dividerThickness = 0.05f;
-
-    [Header("Physics (Metadata Only)")]
-    public float mass = 1.0f;
+    public float dividerThickness = 0.08f;
 
     private MeshFilter meshFilter;
     private Mesh bucketMesh;
@@ -44,35 +42,20 @@ public class BucketGenerator : MonoBehaviour
 
     private void OnValidate()
     {
-        // Enforce logical dimension boundaries
         if (topRadius < 0.1f) topRadius = 0.1f;
         if (bottomRadius < 0.1f) bottomRadius = 0.1f;
         if (height < 0.1f) height = 0.1f;
         if (thickness < 0.01f) thickness = 0.01f;
         if (thickness >= Mathf.Min(topRadius, bottomRadius)) thickness = Mathf.Min(topRadius, bottomRadius) - 0.05f;
         if (dividerThickness < 0.01f) dividerThickness = 0.01f;
+        if (heightSubdivisions < 2) heightSubdivisions = 2;
+        if (floorSubdivisions < 2) floorSubdivisions = 2;
 
-        // Manage segments dynamically based on the selected shape
         switch (shape)
         {
-            case BucketShape.Triangular:
-                segments = 3;
-                break;
-            case BucketShape.Square:
-                segments = 4;
-                break;
-            case BucketShape.Circular:
-                if (segments < 8) segments = 8;
-                break;
-        }
-
-        // Clean up compartment ratios
-        if (compartmentRatios != null)
-        {
-            for (int i = 0; i < compartmentRatios.Count; i++)
-            {
-                if (compartmentRatios[i] <= 0) compartmentRatios[i] = 1.0f;
-            }
+            case BucketShape.Triangular: segments = 3; break;
+            case BucketShape.Square: segments = 4; break;
+            case BucketShape.Circular: if (segments < 8) segments = 8; break;
         }
 
         GenerateBucket();
@@ -83,80 +66,204 @@ public class BucketGenerator : MonoBehaviour
         if (meshFilter == null) meshFilter = GetComponent<MeshFilter>();
 
         bucketMesh = new Mesh();
-        bucketMesh.name = "ProceduralBucket";
+        bucketMesh.name = "PerfectProceduralBucket";
 
         List<Vector3> vertices = new List<Vector3>();
         List<int> triangles = new List<int>();
 
-        // ==========================================
-        // 1. GENERATE BUCKET SHELL (Outer & Inner)
-        // ==========================================
-        for (int i = 0; i <= segments; i++)
-        {
-            float angle = (i % segments) * 2 * Mathf.PI / segments;
-            float cos = Mathf.Cos(angle);
-            float sin = Mathf.Sin(angle);
+        BucketHoleCutter cutter = GetComponent<BucketHoleCutter>();
+        int ringVertexCount = segments + 1;
 
-            vertices.Add(new Vector3(cos * bottomRadius, 0, sin * bottomRadius));
-            vertices.Add(new Vector3(cos * topRadius, height, sin * topRadius));
+        // 1. GENERATE VERTICES
+        for (int h = 0; h <= heightSubdivisions; h++)
+        {
+            float t = (float)h / heightSubdivisions;
+            float currentHeight = t * height;
+            float currentRadius = Mathf.Lerp(bottomRadius, topRadius, t);
+            for (int i = 0; i <= segments; i++)
+            {
+                float angle = (i % segments) * 2 * Mathf.PI / segments;
+                vertices.Add(new Vector3(Mathf.Cos(angle) * currentRadius, currentHeight, Mathf.Sin(angle) * currentRadius));
+            }
         }
 
+        int innerGridOffset = vertices.Count;
         float innerBottomRadius = bottomRadius - thickness;
         float innerTopRadius = topRadius - thickness;
-
-        for (int i = 0; i <= segments; i++)
+        for (int h = 0; h <= heightSubdivisions; h++)
         {
-            float angle = (i % segments) * 2 * Mathf.PI / segments;
-            float cos = Mathf.Cos(angle);
-            float sin = Mathf.Sin(angle);
-
-            vertices.Add(new Vector3(cos * innerBottomRadius, thickness, sin * innerBottomRadius));
-            vertices.Add(new Vector3(cos * innerTopRadius, height, sin * innerTopRadius));
+            float t = (float)h / heightSubdivisions;
+            float currentHeight = thickness + t * (height - thickness);
+            float currentRadius = Mathf.Lerp(innerBottomRadius, innerTopRadius, t);
+            for (int i = 0; i <= segments; i++)
+            {
+                float angle = (i % segments) * 2 * Mathf.PI / segments;
+                vertices.Add(new Vector3(Mathf.Cos(angle) * currentRadius, currentHeight, Mathf.Sin(angle) * currentRadius));
+            }
         }
 
-        int outerBottomCenterIndex = vertices.Count;
-        vertices.Add(new Vector3(0, 0, 0)); 
-
-        int innerBottomCenterIndex = vertices.Count;
-        vertices.Add(new Vector3(0, thickness, 0)); 
-
-        int outerOffset = 0;
-        int innerOffset = (segments + 1) * 2;
-
-        for (int i = 0; i < segments; i++)
+        int outerFloorOffset = vertices.Count;
+        for (int r = 0; r <= floorSubdivisions; r++)
         {
-            int currentOuterB = outerOffset + (i * 2);
-            int currentOuterT = currentOuterB + 1;
-            int nextOuterB = outerOffset + ((i + 1) * 2);
-            int nextOuterT = nextOuterB + 1;
-
-            int currentInnerB = innerOffset + (i * 2);
-            int currentInnerT = currentInnerB + 1;
-            int nextInnerB = innerOffset + ((i + 1) * 2);
-            int nextInnerT = nextInnerB + 1;
-
-            // Outer Wall
-            triangles.Add(currentOuterB); triangles.Add(currentOuterT); triangles.Add(nextOuterB);
-            triangles.Add(nextOuterB); triangles.Add(currentOuterT); triangles.Add(nextOuterT);
-
-            // Inner Wall
-            triangles.Add(currentInnerB); triangles.Add(nextInnerB); triangles.Add(currentInnerT);
-            triangles.Add(nextInnerB); triangles.Add(nextInnerT); triangles.Add(currentInnerT);
-
-            // Top Rim
-            triangles.Add(currentOuterT); triangles.Add(currentInnerT); triangles.Add(nextOuterT);
-            triangles.Add(nextOuterT); triangles.Add(currentInnerT); triangles.Add(nextInnerT);
-
-            // Outer Bottom Floor
-            triangles.Add(outerBottomCenterIndex); triangles.Add(nextOuterB); triangles.Add(currentOuterB);
-
-            // Inner Bottom Floor
-            triangles.Add(innerBottomCenterIndex); triangles.Add(currentInnerB); triangles.Add(nextInnerB);
+            float radiusT = (float)r / floorSubdivisions;
+            float currentRadius = radiusT * bottomRadius;
+            for (int i = 0; i <= segments; i++)
+            {
+                float angle = (i % segments) * 2 * Mathf.PI / segments;
+                vertices.Add(new Vector3(Mathf.Cos(angle) * currentRadius, 0, Mathf.Sin(angle) * currentRadius));
+            }
         }
 
-        // ==========================================
-        // 2. GENERATE THICK INTERNAL COMPARTMENT WALLS
-        // ==========================================
+        int innerFloorOffset = vertices.Count;
+        for (int r = 0; r <= floorSubdivisions; r++)
+        {
+            float radiusT = (float)r / floorSubdivisions;
+            float currentRadius = radiusT * innerBottomRadius;
+            for (int i = 0; i <= segments; i++)
+            {
+                float angle = (i % segments) * 2 * Mathf.PI / segments;
+                vertices.Add(new Vector3(Mathf.Cos(angle) * currentRadius, thickness, Mathf.Sin(angle) * currentRadius));
+            }
+        }
+
+        // 2. MAP AND GENERATE SIDE WALLS + CORRECTED RIMS
+        bool[,] sideCutMap = new bool[heightSubdivisions, segments];
+        for (int h = 0; h < heightSubdivisions; h++)
+        {
+            for (int i = 0; i < segments; i++)
+            {
+                int o_b_curr = h * ringVertexCount + i;
+                int o_t_next = (h + 1) * ringVertexCount + (i + 1);
+                Vector3 sideFaceCenter = (vertices[o_b_curr] + vertices[o_t_next]) / 2f;
+                sideCutMap[h, i] = (cutter != null) && cutter.ShouldCutFace(sideFaceCenter, false, thickness, height, bottomRadius, topRadius);
+            }
+        }
+
+        for (int h = 0; h < heightSubdivisions; h++)
+        {
+            for (int i = 0; i < segments; i++)
+            {
+                int o_b_curr = h * ringVertexCount + i;
+                int o_b_next = o_b_curr + 1;
+                int o_t_curr = (h + 1) * ringVertexCount + i;
+                int o_t_next = o_t_curr + 1;
+
+                int i_b_curr = innerGridOffset + h * ringVertexCount + i;
+                int i_b_next = i_b_curr + 1;
+                int i_t_curr = innerGridOffset + (h + 1) * ringVertexCount + i;
+                int i_t_next = i_t_curr + 1;
+
+                if (!sideCutMap[h, i])
+                {
+                    triangles.Add(o_b_curr); triangles.Add(o_t_curr); triangles.Add(o_b_next);
+                    triangles.Add(o_b_next); triangles.Add(o_t_curr); triangles.Add(o_t_next);
+
+                    triangles.Add(i_b_curr); triangles.Add(i_b_next); triangles.Add(i_t_curr);
+                    triangles.Add(i_b_next); triangles.Add(i_t_next); triangles.Add(i_t_curr);
+                }
+                else
+                {
+                    // FIXED HOLE SIDE RIMS (WINDING ORDER INDIVIDUALLY CORRECTED FOR OUTWARD LOOK)
+                    if (h == 0 || !sideCutMap[h - 1, i]) // Bottom Edge
+                    {
+                        triangles.Add(o_b_curr); triangles.Add(o_b_next); triangles.Add(i_b_curr);
+                        triangles.Add(i_b_curr); triangles.Add(o_b_next); triangles.Add(i_b_next);
+                    }
+                    if (h == heightSubdivisions - 1 || !sideCutMap[h + 1, i]) // Top Edge
+                    {
+                        triangles.Add(o_t_curr); triangles.Add(i_t_curr); triangles.Add(o_t_next);
+                        triangles.Add(o_t_next); triangles.Add(i_t_curr); triangles.Add(i_t_next);
+                    }
+                    
+                    int prevI = (i == 0) ? segments - 1 : i - 1;
+                    if (!sideCutMap[h, prevI]) // Left Edge: Fixed winding order
+                    {
+                        triangles.Add(o_b_curr); triangles.Add(o_t_curr); triangles.Add(i_b_curr);
+                        triangles.Add(i_b_curr); triangles.Add(o_t_curr); triangles.Add(i_t_curr);
+                    }
+                    
+                    int nextI = (i == segments - 1) ? 0 : i + 1;
+                    if (!sideCutMap[h, nextI]) // Right Edge: Fixed winding order
+                    {
+                        triangles.Add(o_b_next); triangles.Add(i_b_next); triangles.Add(o_t_next);
+                        triangles.Add(o_t_next); triangles.Add(i_b_next); triangles.Add(i_t_next);
+                    }
+                }
+
+                if (h == heightSubdivisions - 1)
+                {
+                    triangles.Add(o_t_curr); triangles.Add(i_t_curr); triangles.Add(o_t_next);
+                    triangles.Add(o_t_next); triangles.Add(i_t_curr); triangles.Add(i_t_next);
+                }
+            }
+        }
+
+        // 3. GENERATE FLOORS (FIXED WINDING)
+        bool[,] floorCutMap = new bool[floorSubdivisions, segments];
+        for (int r = 0; r < floorSubdivisions; r++)
+        {
+            for (int i = 0; i < segments; i++)
+            {
+                int o_f_curr = outerFloorOffset + r * ringVertexCount + i;
+                int o_f_top_next = outerFloorOffset + (r + 1) * ringVertexCount + (i + 1);
+                Vector3 floorCenterPos = (vertices[o_f_curr] + vertices[o_f_top_next]) / 2f;
+                floorCutMap[r, i] = (cutter != null) && cutter.ShouldCutFace(floorCenterPos, true, thickness, height, bottomRadius, topRadius);
+            }
+        }
+
+        for (int r = 0; r < floorSubdivisions; r++)
+        {
+            for (int i = 0; i < segments; i++)
+            {
+                int o_f_curr = outerFloorOffset + r * ringVertexCount + i;
+                int o_f_next = o_f_curr + 1;
+                int o_f_top_curr = outerFloorOffset + (r + 1) * ringVertexCount + i;
+                int o_f_top_next = o_f_top_curr + 1;
+
+                int i_f_curr = innerFloorOffset + r * ringVertexCount + i;
+                int i_f_next = i_f_curr + 1;
+                int i_f_top_curr = innerFloorOffset + (r + 1) * ringVertexCount + i;
+                int i_f_top_next = i_f_top_curr + 1;
+
+                if (!floorCutMap[r, i])
+                {
+                    // Outer Floor facing DOWNWARDS
+                    triangles.Add(o_f_curr); triangles.Add(o_f_top_curr); triangles.Add(o_f_next);
+                    triangles.Add(o_f_next); triangles.Add(o_f_top_curr); triangles.Add(o_f_top_next);
+
+                    // Inner Floor facing UPWARDS
+                    triangles.Add(i_f_curr); triangles.Add(i_f_next); triangles.Add(i_f_top_curr);
+                    triangles.Add(i_f_next); triangles.Add(i_f_top_next); triangles.Add(i_f_top_curr);
+                }
+                else
+                {
+                    if (r == 0 || !floorCutMap[r - 1, i])
+                    {
+                        triangles.Add(o_f_curr); triangles.Add(o_f_next); triangles.Add(i_f_curr);
+                        triangles.Add(i_f_curr); triangles.Add(o_f_next); triangles.Add(i_f_next);
+                    }
+                    if (r == floorSubdivisions - 1 || !floorCutMap[r + 1, i])
+                    {
+                        triangles.Add(o_f_top_curr); triangles.Add(i_f_top_curr); triangles.Add(o_f_top_next);
+                        triangles.Add(o_f_top_next); triangles.Add(i_f_top_curr); triangles.Add(i_f_top_next);
+                    }
+                    int prevI = (i == 0) ? segments - 1 : i - 1;
+                    if (!floorCutMap[r, prevI])
+                    {
+                        triangles.Add(o_f_curr); triangles.Add(i_f_curr); triangles.Add(o_f_top_curr);
+                        triangles.Add(o_f_top_curr); triangles.Add(i_f_curr); triangles.Add(i_f_top_curr);
+                    }
+                    int nextI = (i == segments - 1) ? 0 : i + 1;
+                    if (!floorCutMap[r, nextI])
+                    {
+                        triangles.Add(o_f_next); triangles.Add(o_f_top_next); triangles.Add(i_f_next);
+                        triangles.Add(i_f_next); triangles.Add(o_f_top_next); triangles.Add(i_f_top_next);
+                    }
+                }
+            }
+        }
+
+        // 4. GENERATE COMPARTMENTS (Proven Working Structure)
         if (compartmentRatios != null && compartmentRatios.Count > 1)
         {
             float totalRatioSum = 0;
@@ -167,60 +274,39 @@ public class BucketGenerator : MonoBehaviour
 
             for (int i = 0; i < compartmentRatios.Count; i++)
             {
-                // Direction vector along the divider wall line
                 Vector3 wallDir = new Vector3(Mathf.Cos(currentAngle), 0, Mathf.Sin(currentAngle));
-                // Perpendicular vector to push vertices sideways and create thickness
                 Vector3 wallNormal = new Vector3(-Mathf.Sin(currentAngle), 0, Mathf.Cos(currentAngle));
 
-                // 8 Vertices to form a 3D block for the divider wall
-                // Center-side vertices (shifted left and right by half thickness)
                 Vector3 c_bottom_left  = new Vector3(0, thickness, 0) - (wallNormal * halfThickness);
                 Vector3 c_bottom_right = new Vector3(0, thickness, 0) + (wallNormal * halfThickness);
                 Vector3 c_top_left     = new Vector3(0, height, 0) - (wallNormal * halfThickness);
                 Vector3 c_top_right    = new Vector3(0, height, 0) + (wallNormal * halfThickness);
 
-                // Perimeter-side vertices (shifted left and right by half thickness)
                 Vector3 p_bottom_left  = (wallDir * innerBottomRadius) + new Vector3(0, thickness, 0) - (wallNormal * halfThickness);
                 Vector3 p_bottom_right = (wallDir * innerBottomRadius) + new Vector3(0, thickness, 0) + (wallNormal * halfThickness);
                 Vector3 p_top_left     = (wallDir * innerTopRadius) + new Vector3(0, height, 0) - (wallNormal * halfThickness);
                 Vector3 p_top_right    = (wallDir * innerTopRadius) + new Vector3(0, height, 0) + (wallNormal * halfThickness);
 
                 int baseIndex = vertices.Count;
+                vertices.Add(c_bottom_left); vertices.Add(c_top_left); vertices.Add(p_bottom_left); vertices.Add(p_top_left);
+                vertices.Add(c_bottom_right); vertices.Add(c_top_right); vertices.Add(p_bottom_right); vertices.Add(p_top_right);
 
-                // Add vertices to list
-                vertices.Add(c_bottom_left);  // 0
-                vertices.Add(c_top_left);     // 1
-                vertices.Add(p_bottom_left);  // 2
-                vertices.Add(p_top_left);     // 3
-                vertices.Add(c_bottom_right); // 4
-                vertices.Add(c_top_right);    // 5
-                vertices.Add(p_bottom_right); // 6
-                vertices.Add(p_top_right);    // 7
-
-                // Side A (Left face)
                 triangles.Add(baseIndex + 0); triangles.Add(baseIndex + 1); triangles.Add(baseIndex + 2);
                 triangles.Add(baseIndex + 2); triangles.Add(baseIndex + 1); triangles.Add(baseIndex + 3);
 
-                // Side B (Right face)
                 triangles.Add(baseIndex + 4); triangles.Add(baseIndex + 6); triangles.Add(baseIndex + 5);
                 triangles.Add(baseIndex + 6); triangles.Add(baseIndex + 7); triangles.Add(baseIndex + 5);
 
-                // Top Face of the divider
                 triangles.Add(baseIndex + 1); triangles.Add(baseIndex + 5); triangles.Add(baseIndex + 3);
                 triangles.Add(baseIndex + 3); triangles.Add(baseIndex + 5); triangles.Add(baseIndex + 7);
 
-                // Calculate angle for the next compartment divider
                 float normalizedRatio = compartmentRatios[i] / totalRatioSum;
                 currentAngle += normalizedRatio * 2 * Mathf.PI;
             }
         }
 
-        // ==========================================
-        // 3. ASSIGN AND RECALCULATE MESH
-        // ==========================================
         bucketMesh.vertices = vertices.ToArray();
         bucketMesh.triangles = triangles.ToArray();
-
         bucketMesh.RecalculateNormals();
         bucketMesh.RecalculateBounds();
 

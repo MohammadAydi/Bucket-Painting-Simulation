@@ -35,7 +35,10 @@ public class FluidSimulation : MonoBehaviour {
     bool _lastShowDensity;
 
     public Vector2[] Positions => _positions;
-    
+
+
+    private static readonly int SmoothnessID = Shader.PropertyToID("_Smoothness");
+    private static readonly int SmoothingRadiusID = Shader.PropertyToID("_SmoothingRadius");
 
 
     public float gravity = 9.81f;
@@ -77,6 +80,7 @@ public class FluidSimulation : MonoBehaviour {
 
         _densities = new float[settings.particleCount];
         _velocities = new Vector2[settings.particleCount];
+        _positions = new Vector2[settings.particleCount];
         Array.Fill(_velocities, Vector2.zero);
         (_positions, particleProperty) = particlesSpawner.RandomSpawnParticles(BoundsMin, BoundsMax);
         particleRenderer.UpdatePositions(_positions);
@@ -86,8 +90,8 @@ public class FluidSimulation : MonoBehaviour {
         _lastRadius = settings.radius;
         _lastSmoothingRadius = settings.smoothingRadius;
         _lastCount = settings.particleCount;
-        _lastColor = settings.color;
-        _lastDensityColor = settings.densityColor;
+        _lastColor = settings.particleColor;
+        _lastDensityColor = settings.TargetDensityColor;
         _lastParticleSpacing = settings.particleSpacing;
         _lastSmoothness = settings.smoothness;
         _lastShowDensity = settings.showDensity;
@@ -139,13 +143,13 @@ public class FluidSimulation : MonoBehaviour {
             _lastSmoothingRadius = settings.smoothingRadius;
         }
 
-        if (_lastColor != settings.color) {
-            particleRenderer.SetColor(settings.color);
-            _lastColor = settings.color;
+        if (_lastColor != settings.particleColor) {
+            particleRenderer.SetColor(settings.particleColor);
+            _lastColor = settings.particleColor;
         }
 
-        if (_lastDensityColor != settings.densityColor) {
-            _lastDensityColor = settings.densityColor;
+        if (_lastDensityColor != settings.TargetDensityColor) {
+            _lastDensityColor = settings.TargetDensityColor;
         }
 
         if (_lastParticleSpacing != settings.particleSpacing) {
@@ -182,7 +186,14 @@ public class FluidSimulation : MonoBehaviour {
     // shows or hides the density renderer GameObject
     void ApplyDensityVisibility() {
     }
-    
+
+
+    void UpdateDensities() {
+        System.Threading.Tasks.Parallel.For(0, _positions.Length, i => {
+            _densities[i] = DensityCalculator.CalculateDensity(
+                _positions[i], _positions, settings.smoothingRadius);
+        });
+    }
 
 
     float ConvertDensityToPressure(float density) {

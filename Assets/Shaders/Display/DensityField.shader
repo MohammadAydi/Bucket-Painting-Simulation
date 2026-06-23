@@ -1,27 +1,38 @@
-Shader "Fluid/OldDensityField"
+Shader "Fluid/DensityField"
 {
     Properties
     {
     }
+
     SubShader
     {
         Tags
         {
-            "Queue"="Background" "RenderType"="Opaque"
+            "Queue" = "Background"
+            "RenderType" = "Opaque"
         }
+
         ZWrite Off
         Cull Off
 
         Pass
         {
             CGPROGRAM
-            #pragma vertex   vert
+            #pragma target 4.5
+            #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
 
-            // particle data passed from C#
-            float2 _Positions[700];
+            struct ParticleData
+            {
+                float2 position;
+                float2 velocity;
+                float2 force;
+                float density;
+                float pressure;
+            };
 
+            StructuredBuffer<ParticleData> _Particles;
             int _ParticleCount;
             float _Mass;
             float _SmoothingRadius;
@@ -42,55 +53,49 @@ Shader "Fluid/OldDensityField"
                 float2 worldPos : TEXCOORD0;
             };
 
-            // bounds passed from C# to convert UV → world position
-            float2 _BoundsMin;
-            float2 _BoundsMax;
-
             v2f vert(appdata v)
             {
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
-                // convert UV (0..1) to world space using bounds
-                o.worldPos = lerp(_BoundsMin, _BoundsMax, v.uv);
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xy;
                 return o;
             }
 
-
             float SmoothingKernel(float radius, float dst)
             {
-                if (dst >= radius) return 0.0;
+                if (dst >= radius)
+                    return 0.0;
+
                 float volume = UNITY_PI * pow(radius, 4) / 6.0;
-                return (radius - dst) * (radius - dst) / volume;
+                float diff = radius - dst;
+                return diff * diff / volume;
             }
-            
 
             float CalculateDensity(float2 samplePoint)
             {
                 float density = 0.0;
+
                 for (int i = 0; i < _ParticleCount; i++)
                 {
-                    float dst = length(_Positions[i] - samplePoint);
-                    float influence = SmoothingKernel(_SmoothingRadius, dst);
-                    density += influence; // mass = 1
+                    float dst = distance(_Particles[i].position, samplePoint);
+                    density += _Mass * SmoothingKernel(_SmoothingRadius, dst);
                 }
+
                 return density;
-                return cos(samplePoint.y - 3 + sin(samplePoint.x));
             }
 
             fixed4 DensityToColor(float density)
             {
                 if (density < _TargetDensity)
                 {
-                    float t = density / _TargetDensity;
+                    float t = saturate(density / _TargetDensity);
                     return lerp(_LowColor, _TargetColor, t);
                 }
-                else
-                {
-                    float t = saturate((density - _TargetDensity) / _TargetDensity);
-                    return lerp(_TargetColor, _HighColor, t);
-                }
+
+                float t = saturate((density - _TargetDensity) / _TargetDensity);
+                return lerp(_TargetColor, _HighColor, t);
             }
-            
+
             fixed4 frag(v2f i) : SV_Target
             {
                 float density = CalculateDensity(i.worldPos);

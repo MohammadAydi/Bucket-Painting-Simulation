@@ -1,4 +1,4 @@
-Shader "Fluid/ParticleCircle"
+Shader "Fluid/OldParticleCircle"
 {
     Properties
     {

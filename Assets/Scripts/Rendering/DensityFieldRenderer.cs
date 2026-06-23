@@ -1,6 +1,7 @@
 using UnityEngine;
 
-public class DensityFieldRenderer : MonoBehaviour {
+public class DensityFieldRenderer : MonoBehaviour
+{
     [Header("References")] public FluidSimulation fluidSimulation;
     public Material densityFieldMaterial;
 
@@ -29,7 +30,8 @@ public class DensityFieldRenderer : MonoBehaviour {
     // shader needs float4 array — we pack Vector2 positions into Vector4
     Vector4[] _positionsV4 = new Vector4[700];
 
-    void Start() {
+    void Start()
+    {
         Debug.Log("start density field renderer");
         Camera cam = Camera.main;
         float height = cam.orthographicSize * 2f;
@@ -39,16 +41,19 @@ public class DensityFieldRenderer : MonoBehaviour {
         transform.position = new Vector3(0f, 0f, 0.1f);
     }
 
-    void Update() {
+    void Update()
+    {
         if (!Application.isPlaying) return;
         if (densityFieldMaterial is null) return;
 
-        Vector2[] positions = fluidSimulation.Positions;
+
         int count = Mathf.Min(fluidSimulation.Positions.Length, 700);
+        Vector2[] positions= fluidSimulation.Positions;
         float smoothRadius = fluidSimulation.settings.smoothingRadius;
 
         // pack Vector2 → Vector4 (shader arrays must be float4)
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < count; i++)
+        {
             _positionsV4[i] = new Vector4(positions[i].x, positions[i].y, 0f, 0f);
         }
 

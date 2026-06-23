@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: DensityFieldMaterial
-  m_Shader: {fileID: 4800000, guid: 5e8eae2e94f143528d3f797f362e1881, type: 3}
+  m_Shader: {fileID: 4800000, guid: 9166f3051d290fc40a0869c9736278ba, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []

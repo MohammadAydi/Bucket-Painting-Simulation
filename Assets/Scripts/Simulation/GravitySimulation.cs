@@ -45,7 +45,7 @@ public class GravitySimulation : MonoBehaviour {
         
         _lastRadius = settings.smoothingRadius;
         _lastCount = settings.particleCount;
-        _lastColor = settings.color;
+        _lastColor = settings.particleColor;
         _lastParticleSpacing = settings.particleSpacing;
 
         // Subscribe to inspector changes
@@ -83,9 +83,9 @@ public class GravitySimulation : MonoBehaviour {
         }
         
 
-        if (_lastColor != settings.color) {
-            particleRenderer.SetColor(settings.color);
-            _lastColor = settings.color;
+        if (_lastColor != settings.particleColor) {
+            particleRenderer.SetColor(settings.particleColor);
+            _lastColor = settings.particleColor;
         }
 
         if (_lastParticleSpacing != settings.particleSpacing) {

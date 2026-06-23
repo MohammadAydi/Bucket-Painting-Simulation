@@ -34,7 +34,7 @@ public class ProceduralParticleRenderer : MonoBehaviour
         _mesh.vertices = _vertices;
         BakeTriangles();
 
-        Color c = isDensityRenderer ? cfg.densityColor : cfg.color;
+        Color c = isDensityRenderer ? cfg.TargetDensityColor : cfg.particleColor;
         ApplyColor(c);
     }
 

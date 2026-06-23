@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: CircleMaterial
-  m_Shader: {fileID: 4800000, guid: 7eb6355f6a59dc3498478babab43a574, type: 3}
+  m_Shader: {fileID: 4800000, guid: 48d8edebc3e8efc45b361d2eb3bcddca, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -19,7 +19,7 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: 
+  m_LockedProperties: _Color
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -42,6 +42,10 @@ Material:
     m_Ints: []
     m_Floats:
     - _EnableExternalAlpha: 0
+    - _ParticleRadius: 0.1
+    - _Radius: 0.5
+    - _SmoothingRadius: 1
+    - _Smoothness: 0
     - _ZWrite: 0
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}

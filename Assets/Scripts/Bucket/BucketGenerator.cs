@@ -51,6 +51,24 @@ public class BucketGenerator : MonoBehaviour
         if (heightSubdivisions < 2) heightSubdivisions = 2;
         if (floorSubdivisions < 2) floorSubdivisions = 2;
 
+        if (compartmentRatios != null && compartmentRatios.Count > 0)
+        {
+            float totalRatioSum = 0;
+            for (int i = 0; i < compartmentRatios.Count; i++)
+            {
+                if (compartmentRatios[i] < 0) compartmentRatios[i] = 0;
+                totalRatioSum += compartmentRatios[i];
+            }
+
+            if (totalRatioSum <= 0)
+            {
+                for (int i = 0; i < compartmentRatios.Count; i++)
+                {
+                    compartmentRatios[i] = 1f;
+                }
+            }
+        }
+
         switch (shape)
         {
             case BucketShape.Triangular: segments = 3; break;
@@ -232,7 +250,6 @@ public class BucketGenerator : MonoBehaviour
 
                 if (!floorCutMap[r, i])
                 {
-                    // Draw outer and inner floors normally if not cut
                     triangles.Add(o_f_curr); triangles.Add(o_f_top_curr); triangles.Add(o_f_next);
                     triangles.Add(o_f_next); triangles.Add(o_f_top_curr); triangles.Add(o_f_top_next);
 
@@ -241,26 +258,22 @@ public class BucketGenerator : MonoBehaviour
                 }
                 else
                 {
-                    // 1. Inner Radial Ring Rim
                     if (r == 0 || !floorCutMap[r - 1, i])
                     {
                         AddDoubleSidedTriangle(triangles, o_f_curr, o_f_next, i_f_curr);
                         AddDoubleSidedTriangle(triangles, i_f_curr, o_f_next, i_f_next);
                     }
-                    // 2. Outer Radial Ring Rim
                     if (r == floorSubdivisions - 1 || !floorCutMap[r + 1, i])
                     {
                         AddDoubleSidedTriangle(triangles, o_f_top_curr, i_f_top_curr, o_f_top_next);
                         AddDoubleSidedTriangle(triangles, o_f_top_next, i_f_top_curr, i_f_top_next);
                     }
-                    // 3. Left Segment Rim
                     int prevI = (i == 0) ? segments - 1 : i - 1;
                     if (!floorCutMap[r, prevI])
                     {
                         AddDoubleSidedTriangle(triangles, o_f_curr, i_f_curr, o_f_top_curr);
                         AddDoubleSidedTriangle(triangles, o_f_top_curr, i_f_curr, i_f_top_curr);
                     }
-                    // 4. Right Segment Rim
                     int nextI = (i == segments - 1) ? 0 : i + 1;
                     if (!floorCutMap[r, nextI])
                     {
@@ -276,6 +289,11 @@ public class BucketGenerator : MonoBehaviour
         {
             float totalRatioSum = 0;
             foreach (float r in compartmentRatios) totalRatioSum += r;
+
+            if (totalRatioSum <= 0) 
+            {
+                totalRatioSum = 1f; 
+            }
 
             float currentAngle = 0f;
             float halfThickness = dividerThickness / 2f;

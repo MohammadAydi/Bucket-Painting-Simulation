@@ -18,10 +18,10 @@ public class BucketGenerator : MonoBehaviour
     [Header("Mesh Settings")]
     [Range(3, 128)]
     public int segments = 64;
-    [Range(2, 30)]
-    public int heightSubdivisions = 10;
-    [Range(2, 20)]
-    public int floorSubdivisions = 8;
+    [Range(2, 50)]
+    public int heightSubdivisions = 25;
+    [Range(2, 50)]
+    public int floorSubdivisions = 25;
 
     [Header("Compartments (Pizza Slots)")]
     public List<float> compartmentRatios = new List<float>();

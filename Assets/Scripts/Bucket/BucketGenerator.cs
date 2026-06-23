@@ -22,6 +22,9 @@ public class BucketGenerator : MonoBehaviour
     [Header("Compartments (Pizza Slots)")]
     [Tooltip("Add sections to split the bucket")]
     public List<float> compartmentRatios = new List<float>();
+    
+    [Tooltip("Thickness of the internal divider walls.")]
+    public float dividerThickness = 0.05f;
 
     [Header("Physics (Metadata Only)")]
     public float mass = 1.0f;
@@ -47,6 +50,7 @@ public class BucketGenerator : MonoBehaviour
         if (height < 0.1f) height = 0.1f;
         if (thickness < 0.01f) thickness = 0.01f;
         if (thickness >= Mathf.Min(topRadius, bottomRadius)) thickness = Mathf.Min(topRadius, bottomRadius) - 0.05f;
+        if (dividerThickness < 0.01f) dividerThickness = 0.01f;
 
         // Manage segments dynamically based on the selected shape
         switch (shape)
@@ -62,7 +66,7 @@ public class BucketGenerator : MonoBehaviour
                 break;
         }
 
-        // Clean up compartment ratios (no zero or negative numbers allowed)
+        // Clean up compartment ratios
         if (compartmentRatios != null)
         {
             for (int i = 0; i < compartmentRatios.Count; i++)
@@ -93,7 +97,6 @@ public class BucketGenerator : MonoBehaviour
             float cos = Mathf.Cos(angle);
             float sin = Mathf.Sin(angle);
 
-            // Outer Vertices
             vertices.Add(new Vector3(cos * bottomRadius, 0, sin * bottomRadius));
             vertices.Add(new Vector3(cos * topRadius, height, sin * topRadius));
         }
@@ -107,7 +110,6 @@ public class BucketGenerator : MonoBehaviour
             float cos = Mathf.Cos(angle);
             float sin = Mathf.Sin(angle);
 
-            // Inner Vertices
             vertices.Add(new Vector3(cos * innerBottomRadius, thickness, sin * innerBottomRadius));
             vertices.Add(new Vector3(cos * innerTopRadius, height, sin * innerTopRadius));
         }
@@ -118,7 +120,6 @@ public class BucketGenerator : MonoBehaviour
         int innerBottomCenterIndex = vertices.Count;
         vertices.Add(new Vector3(0, thickness, 0)); 
 
-        // Generate Shell Triangles
         int outerOffset = 0;
         int innerOffset = (segments + 1) * 2;
 
@@ -154,7 +155,7 @@ public class BucketGenerator : MonoBehaviour
         }
 
         // ==========================================
-        // 2. GENERATE INTERNAL COMPARTMENT WALLS
+        // 2. GENERATE THICK INTERNAL COMPARTMENT WALLS
         // ==========================================
         if (compartmentRatios != null && compartmentRatios.Count > 1)
         {
@@ -162,40 +163,51 @@ public class BucketGenerator : MonoBehaviour
             foreach (float r in compartmentRatios) totalRatioSum += r;
 
             float currentAngle = 0f;
+            float halfThickness = dividerThickness / 2f;
 
-            // Generate a divider wall at the start of each compartment
             for (int i = 0; i < compartmentRatios.Count; i++)
             {
-                float cos = Mathf.Cos(currentAngle);
-                float sin = Mathf.Sin(currentAngle);
+                // Direction vector along the divider wall line
+                Vector3 wallDir = new Vector3(Mathf.Cos(currentAngle), 0, Mathf.Sin(currentAngle));
+                // Perpendicular vector to push vertices sideways and create thickness
+                Vector3 wallNormal = new Vector3(-Mathf.Sin(currentAngle), 0, Mathf.Cos(currentAngle));
 
-                // Define the 4 points of the divider wall quadrilateral
-                Vector3 centerBottom = new Vector3(0, thickness, 0);
-                Vector3 centerTop = new Vector3(0, height, 0);
-                Vector3 perimeterBottom = new Vector3(cos * innerBottomRadius, thickness, sin * innerBottomRadius);
-                Vector3 perimeterTop = new Vector3(cos * innerTopRadius, height, sin * innerTopRadius);
+                // 8 Vertices to form a 3D block for the divider wall
+                // Center-side vertices (shifted left and right by half thickness)
+                Vector3 c_bottom_left  = new Vector3(0, thickness, 0) - (wallNormal * halfThickness);
+                Vector3 c_bottom_right = new Vector3(0, thickness, 0) + (wallNormal * halfThickness);
+                Vector3 c_top_left     = new Vector3(0, height, 0) - (wallNormal * halfThickness);
+                Vector3 c_top_right    = new Vector3(0, height, 0) + (wallNormal * halfThickness);
 
-                // Add vertices for Side A (Facing one direction)
-                int v0 = vertices.Count;
-                vertices.Add(centerBottom);
-                vertices.Add(centerTop);
-                vertices.Add(perimeterBottom);
-                vertices.Add(perimeterTop);
+                // Perimeter-side vertices (shifted left and right by half thickness)
+                Vector3 p_bottom_left  = (wallDir * innerBottomRadius) + new Vector3(0, thickness, 0) - (wallNormal * halfThickness);
+                Vector3 p_bottom_right = (wallDir * innerBottomRadius) + new Vector3(0, thickness, 0) + (wallNormal * halfThickness);
+                Vector3 p_top_left     = (wallDir * innerTopRadius) + new Vector3(0, height, 0) - (wallNormal * halfThickness);
+                Vector3 p_top_right    = (wallDir * innerTopRadius) + new Vector3(0, height, 0) + (wallNormal * halfThickness);
 
-                // Triangles Side A
-                triangles.Add(v0); triangles.Add(v0 + 1); triangles.Add(v0 + 2);
-                triangles.Add(v0 + 2); triangles.Add(v0 + 1); triangles.Add(v0 + 3);
+                int baseIndex = vertices.Count;
 
-                // Add vertices for Side B (Facing the opposite direction)
-                int v1 = vertices.Count;
-                vertices.Add(centerBottom);
-                vertices.Add(centerTop);
-                vertices.Add(perimeterBottom);
-                vertices.Add(perimeterTop);
+                // Add vertices to list
+                vertices.Add(c_bottom_left);  // 0
+                vertices.Add(c_top_left);     // 1
+                vertices.Add(p_bottom_left);  // 2
+                vertices.Add(p_top_left);     // 3
+                vertices.Add(c_bottom_right); // 4
+                vertices.Add(c_top_right);    // 5
+                vertices.Add(p_bottom_right); // 6
+                vertices.Add(p_top_right);    // 7
 
-                // Triangles Side B (Reversed winding order)
-                triangles.Add(v1); triangles.Add(v1 + 2); triangles.Add(v1 + 1);
-                triangles.Add(v1 + 2); triangles.Add(v1 + 3); triangles.Add(v1 + 1);
+                // Side A (Left face)
+                triangles.Add(baseIndex + 0); triangles.Add(baseIndex + 1); triangles.Add(baseIndex + 2);
+                triangles.Add(baseIndex + 2); triangles.Add(baseIndex + 1); triangles.Add(baseIndex + 3);
+
+                // Side B (Right face)
+                triangles.Add(baseIndex + 4); triangles.Add(baseIndex + 6); triangles.Add(baseIndex + 5);
+                triangles.Add(baseIndex + 6); triangles.Add(baseIndex + 7); triangles.Add(baseIndex + 5);
+
+                // Top Face of the divider
+                triangles.Add(baseIndex + 1); triangles.Add(baseIndex + 5); triangles.Add(baseIndex + 3);
+                triangles.Add(baseIndex + 3); triangles.Add(baseIndex + 5); triangles.Add(baseIndex + 7);
 
                 // Calculate angle for the next compartment divider
                 float normalizedRatio = compartmentRatios[i] / totalRatioSum;

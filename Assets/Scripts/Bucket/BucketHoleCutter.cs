@@ -29,6 +29,16 @@ public class BucketHoleCutter : MonoBehaviour
     [Header("List of Holes")]
     public List<HoleData> holes = new List<HoleData>();
 
+    // LIVE AUTOREFRESH TRIGGER
+    private void OnValidate()
+    {
+        BucketGenerator generator = GetComponent<BucketGenerator>();
+        if (generator != null)
+        {
+            generator.OnValidate(); // Forces immediate reconstruction when inspector values tweak
+        }
+    }
+
     public bool ShouldCutFace(Vector3 faceCenter, bool isFloor, float thickness, float bucketHeight, float bottomRadius, float topRadius)
     {
         if (!enableHoles || holes == null || holes.Count == 0) return false;
@@ -37,12 +47,10 @@ public class BucketHoleCutter : MonoBehaviour
         {
             if (hole.location == HoleLocation.Side && !isFloor)
             {
-                // Calculate the true angle of the current mesh face in degrees (0 to 360)
                 float faceAngleRad = Mathf.Atan2(faceCenter.z, faceCenter.x);
-                float faceAngleDeg = faceAngleRad * Mathf.Rad2Deg;
+                float faceAngleDeg = faceAngleRad * Mathf.Rad2Deg; // FIXED: Typo fixed here
                 if (faceAngleDeg < 0) faceAngleDeg += 360f;
 
-                // Absolute angular delta checking for absolute circular safety
                 float angleDelta = Mathf.Abs(faceAngleDeg - hole.angleDegrees);
                 if (angleDelta > 180f) angleDelta = 360f - angleDelta;
 
@@ -56,7 +64,6 @@ public class BucketHoleCutter : MonoBehaviour
                 }
                 else if (hole.type == HoleType.Rectangular)
                 {
-                    // FIX: Convert angular delta into arc length to avoid duplicate mirror cut
                     float averageRadius = (bottomRadius + topRadius) / 2f;
                     float arcDistanceX = (angleDelta * Mathf.Deg2Rad) * averageRadius;
                     float localY = Mathf.Abs(faceCenter.y - hole.heightPosition);

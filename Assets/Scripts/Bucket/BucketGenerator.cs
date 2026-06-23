@@ -40,7 +40,7 @@ public class BucketGenerator : MonoBehaviour
         GenerateBucket();
     }
 
-    private void OnValidate()
+    public void OnValidate()
     {
         if (topRadius < 0.1f) topRadius = 0.1f;
         if (bottomRadius < 0.1f) bottomRadius = 0.1f;
@@ -61,12 +61,21 @@ public class BucketGenerator : MonoBehaviour
         GenerateBucket();
     }
 
+    // Helper unique to bridge rims double-sided to defeat culling completely
+    private void AddDoubleSidedTriangle(List<int> tris, int v1, int v2, int v3)
+    {
+        // Face A (Clockwise)
+        tris.Add(v1); tris.Add(v2); tris.Add(v3);
+        // Face B (Counter-Clockwise)
+        tris.Add(v1); tris.Add(v3); tris.Add(v2);
+    }
+
     public void GenerateBucket()
     {
         if (meshFilter == null) meshFilter = GetComponent<MeshFilter>();
 
         bucketMesh = new Mesh();
-        bucketMesh.name = "PerfectProceduralBucket";
+        bucketMesh.name = "PerfectSolidBucket";
 
         List<Vector3> vertices = new List<Vector3>();
         List<int> triangles = new List<int>();
@@ -126,7 +135,7 @@ public class BucketGenerator : MonoBehaviour
             }
         }
 
-        // 2. MAP AND GENERATE SIDE WALLS + CORRECTED RIMS
+        // 2. GENERATE SIDE WALLS + FOOLPROOF RIMS
         bool[,] sideCutMap = new bool[heightSubdivisions, segments];
         for (int h = 0; h < heightSubdivisions; h++)
         {
@@ -163,42 +172,42 @@ public class BucketGenerator : MonoBehaviour
                 }
                 else
                 {
-                    // FIXED HOLE SIDE RIMS (WINDING ORDER INDIVIDUALLY CORRECTED FOR OUTWARD LOOK)
+                    // SIDE WALL RIMS: Double-Sided Generation ensures visibility from any perspective
                     if (h == 0 || !sideCutMap[h - 1, i]) // Bottom Edge
                     {
-                        triangles.Add(o_b_curr); triangles.Add(o_b_next); triangles.Add(i_b_curr);
-                        triangles.Add(i_b_curr); triangles.Add(o_b_next); triangles.Add(i_b_next);
+                        AddDoubleSidedTriangle(triangles, o_b_curr, o_b_next, i_b_curr);
+                        AddDoubleSidedTriangle(triangles, i_b_curr, o_b_next, i_b_next);
                     }
                     if (h == heightSubdivisions - 1 || !sideCutMap[h + 1, i]) // Top Edge
                     {
-                        triangles.Add(o_t_curr); triangles.Add(i_t_curr); triangles.Add(o_t_next);
-                        triangles.Add(o_t_next); triangles.Add(i_t_curr); triangles.Add(i_t_next);
+                        AddDoubleSidedTriangle(triangles, o_t_curr, i_t_curr, o_t_next);
+                        AddDoubleSidedTriangle(triangles, o_t_next, i_t_curr, i_t_next);
                     }
                     
                     int prevI = (i == 0) ? segments - 1 : i - 1;
-                    if (!sideCutMap[h, prevI]) // Left Edge: Fixed winding order
+                    if (!sideCutMap[h, prevI]) // Left Edge
                     {
-                        triangles.Add(o_b_curr); triangles.Add(o_t_curr); triangles.Add(i_b_curr);
-                        triangles.Add(i_b_curr); triangles.Add(o_t_curr); triangles.Add(i_t_curr);
+                        AddDoubleSidedTriangle(triangles, o_b_curr, o_t_curr, i_b_curr);
+                        AddDoubleSidedTriangle(triangles, i_b_curr, o_t_curr, i_t_curr);
                     }
                     
                     int nextI = (i == segments - 1) ? 0 : i + 1;
-                    if (!sideCutMap[h, nextI]) // Right Edge: Fixed winding order
+                    if (!sideCutMap[h, nextI]) // Right Edge
                     {
-                        triangles.Add(o_b_next); triangles.Add(i_b_next); triangles.Add(o_t_next);
-                        triangles.Add(o_t_next); triangles.Add(i_b_next); triangles.Add(i_t_next);
+                        AddDoubleSidedTriangle(triangles, o_b_next, i_b_next, o_t_next);
+                        AddDoubleSidedTriangle(triangles, o_t_next, i_b_next, i_t_next);
                     }
                 }
 
                 if (h == heightSubdivisions - 1)
                 {
-                    triangles.Add(o_t_curr); triangles.Add(i_t_curr); triangles.Add(o_t_next);
-                    triangles.Add(o_t_next); triangles.Add(i_t_curr); triangles.Add(i_t_next);
+                    AddDoubleSidedTriangle(triangles, o_t_curr, i_t_curr, o_t_next);
+                    AddDoubleSidedTriangle(triangles, o_t_next, i_t_curr, i_t_next);
                 }
             }
         }
 
-        // 3. GENERATE FLOORS (FIXED WINDING)
+        // 3. GENERATE FLOORS + DOUBLE-SIDED FLOOR HOLE RIMS
         bool[,] floorCutMap = new bool[floorSubdivisions, segments];
         for (int r = 0; r < floorSubdivisions; r++)
         {
@@ -227,43 +236,44 @@ public class BucketGenerator : MonoBehaviour
 
                 if (!floorCutMap[r, i])
                 {
-                    // Outer Floor facing DOWNWARDS
                     triangles.Add(o_f_curr); triangles.Add(o_f_top_curr); triangles.Add(o_f_next);
                     triangles.Add(o_f_next); triangles.Add(o_f_top_curr); triangles.Add(o_f_top_next);
 
-                    // Inner Floor facing UPWARDS
                     triangles.Add(i_f_curr); triangles.Add(i_f_next); triangles.Add(i_f_top_curr);
                     triangles.Add(i_f_next); triangles.Add(i_f_top_next); triangles.Add(i_f_top_curr);
                 }
                 else
                 {
-                    if (r == 0 || !floorCutMap[r - 1, i])
+                    // FLOOR RIMS: Double-Sided to absolute safety
+                    if (r == 0 || !floorCutMap[r - 1, i]) // Inner Circle Boundary Edge
                     {
-                        triangles.Add(o_f_curr); triangles.Add(o_f_next); triangles.Add(i_f_curr);
-                        triangles.Add(i_f_curr); triangles.Add(o_f_next); triangles.Add(i_f_next);
+                        AddDoubleSidedTriangle(triangles, o_f_curr, o_f_next, i_f_curr);
+                        AddDoubleSidedTriangle(triangles, i_f_curr, o_f_next, i_f_next);
                     }
-                    if (r == floorSubdivisions - 1 || !floorCutMap[r + 1, i])
+                    if (r == floorSubdivisions - 1 || !floorCutMap[r + 1, i]) // Outer Circle Boundary Edge
                     {
-                        triangles.Add(o_f_top_curr); triangles.Add(i_f_top_curr); triangles.Add(o_f_top_next);
-                        triangles.Add(o_f_top_next); triangles.Add(i_f_top_curr); triangles.Add(i_f_top_next);
+                        AddDoubleSidedTriangle(triangles, o_f_top_curr, i_f_top_curr, o_f_top_next);
+                        AddDoubleSidedTriangle(triangles, o_f_top_next, i_f_top_curr, i_f_top_next);
                     }
+                    
                     int prevI = (i == 0) ? segments - 1 : i - 1;
-                    if (!floorCutMap[r, prevI])
+                    if (!floorCutMap[r, prevI]) // Radial Left Edge
                     {
-                        triangles.Add(o_f_curr); triangles.Add(i_f_curr); triangles.Add(o_f_top_curr);
-                        triangles.Add(o_f_top_curr); triangles.Add(i_f_curr); triangles.Add(i_f_top_curr);
+                        AddDoubleSidedTriangle(triangles, o_f_curr, i_f_curr, o_f_top_curr);
+                        AddDoubleSidedTriangle(triangles, o_f_top_curr, i_f_curr, i_f_top_curr);
                     }
+                    
                     int nextI = (i == segments - 1) ? 0 : i + 1;
-                    if (!floorCutMap[r, nextI])
+                    if (!floorCutMap[r, nextI]) // Radial Right Edge
                     {
-                        triangles.Add(o_f_next); triangles.Add(o_f_top_next); triangles.Add(i_f_next);
-                        triangles.Add(i_f_next); triangles.Add(o_f_top_next); triangles.Add(i_f_top_next);
+                        AddDoubleSidedTriangle(triangles, o_f_next, o_f_top_next, i_f_next);
+                        AddDoubleSidedTriangle(triangles, o_f_top_next, i_f_top_next, i_f_top_next);
                     }
                 }
             }
         }
 
-        // 4. GENERATE COMPARTMENTS (Proven Working Structure)
+        // 4. GENERATE COMPARTMENTS
         if (compartmentRatios != null && compartmentRatios.Count > 1)
         {
             float totalRatioSum = 0;

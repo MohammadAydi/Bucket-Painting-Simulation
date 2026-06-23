@@ -52,17 +52,14 @@ public class StudioGenerator : MonoBehaviour
 
     private GameObject CreateStudioElement(string elementName, Vector3 scale, Vector3 position, Material mat)
     {
-        // Fix: Create an empty object first to avoid attached built-in colliders entirely
         GameObject element = new GameObject(elementName);
         element.transform.parent = this.transform;
         element.transform.localPosition = position;
         element.transform.localScale = scale;
 
-        // Manually add only rendering components
         MeshFilter meshFilter = element.AddComponent<MeshFilter>();
         MeshRenderer meshRenderer = element.AddComponent<MeshRenderer>();
 
-        // Load Unity's standard built-in primitive cube mesh safely without creating colliders
         meshFilter.sharedMesh = Resources.GetBuiltinResource<Mesh>("Cube.fbx");
 
         if (mat != null)
@@ -97,7 +94,6 @@ public class StudioGenerator : MonoBehaviour
 
     public void ClearStudio()
     {
-        // Using a safe loop to clean up inside editor or runtime
         while (transform.childCount > 0)
         {
             DestroyImmediate(transform.GetChild(0).gameObject);
@@ -109,7 +105,6 @@ public class StudioGenerator : MonoBehaviour
     {
         if (!Application.isPlaying)
         {
-            // Deferring the generation to the next editor frame to avoid internal redraw conflicts
             UnityEditor.EditorApplication.delayCall += () => {
                 if (this != null) GenerateStudio();
             };

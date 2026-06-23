@@ -35,7 +35,7 @@ public class BucketHoleCutter : MonoBehaviour
         BucketGenerator generator = GetComponent<BucketGenerator>();
         if (generator != null)
         {
-            generator.OnValidate(); // Forces immediate reconstruction when inspector values tweak
+            generator.OnValidate();
         }
     }
 
@@ -48,7 +48,7 @@ public class BucketHoleCutter : MonoBehaviour
             if (hole.location == HoleLocation.Side && !isFloor)
             {
                 float faceAngleRad = Mathf.Atan2(faceCenter.z, faceCenter.x);
-                float faceAngleDeg = faceAngleRad * Mathf.Rad2Deg; // FIXED: Typo fixed here
+                float faceAngleDeg = faceAngleRad * Mathf.Rad2Deg;
                 if (faceAngleDeg < 0) faceAngleDeg += 360f;
 
                 float angleDelta = Mathf.Abs(faceAngleDeg - hole.angleDegrees);

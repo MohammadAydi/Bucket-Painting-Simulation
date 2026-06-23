@@ -203,7 +203,7 @@ public class BucketGenerator : MonoBehaviour
             }
         }
 
-        // 3. GENERATE FLOORS + FIXED TRIANGLE-LEVEL FLOOR RIMS
+        // 3. GENERATE FLOORS
         bool[,] floorCutMap = new bool[floorSubdivisions, segments];
         for (int r = 0; r < floorSubdivisions; r++)
         {
@@ -241,7 +241,6 @@ public class BucketGenerator : MonoBehaviour
                 }
                 else
                 {
-                    // CRISIS SOLVED: Every cut cell forces its 4 borders to verify on a triangle-subdivision basis
                     // 1. Inner Radial Ring Rim
                     if (r == 0 || !floorCutMap[r - 1, i])
                     {
@@ -266,7 +265,7 @@ public class BucketGenerator : MonoBehaviour
                     if (!floorCutMap[r, nextI])
                     {
                         AddDoubleSidedTriangle(triangles, o_f_next, o_f_top_next, i_f_next);
-                        AddDoubleSidedTriangle(triangles, i_f_next, o_f_top_next, i_f_top_next); // FIXED: Forces both halves of the triangle link to snap solid
+                        AddDoubleSidedTriangle(triangles, i_f_next, o_f_top_next, i_f_top_next);
                     }
                 }
             }

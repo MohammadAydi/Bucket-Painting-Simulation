@@ -157,6 +157,8 @@ public class SphericalPendulum : MonoBehaviour
     {
         Vector3 bobPos = pivot.position + SphericalToCartesian(th, ph, length);
         bob.position = bobPos;
+        Vector3 ropeDir = (pivot.position - bobPos).normalized;
+        bob.rotation = Quaternion.FromToRotation(Vector3.up, ropeDir);
     }
  
     private static Vector3 SphericalToCartesian(double theta, double phi, double l)

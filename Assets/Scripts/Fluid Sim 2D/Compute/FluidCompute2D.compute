@@ -320,9 +320,10 @@ void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
             float2 dir = (dst > 0.0) ? (offset / dst) : float2(0.0, 1.0);
             float slope = SmoothingKernelDerivative(dst, _SmoothingRadius);
             float sharedP = (self.pressure + other.pressure) * 0.5;
-            float density = max(other.density, 0.0001);
+            float otherDensity = max(other.density, 0.0001);
+            // float selfDensity = max(self.density, 0.0001);
 
-            pressForce += dir * (sharedP * slope * _Mass) / density;
+            pressForce += dir * (sharedP * slope * _Mass) / otherDensity;
         }
     }
 

@@ -65,6 +65,8 @@ public class FluidManager2D : MonoBehaviour
     void Start()
     {
         Debug.Log("FluidManager2D Start called.");
+        float deltaTime = 1 / 60f;
+        Time.fixedDeltaTime = deltaTime;
         if (settings != null)
         {
             settings.OnChanged += OnSettingsChanged;
@@ -137,9 +139,11 @@ public class FluidManager2D : MonoBehaviour
                 currentStrength = -settings.interactionStrength;
             }
         }
-
-        // Pass the calculated interaction profiles directly to the execution pipeline
-        _physicsSystem.Simulate(settings, 1f / 120f, BoundsMin, BoundsMax, mouseWorldPos, currentStrength);
+        for (int i = 0; i < 3; i++)
+        {
+            // Pass the calculated interaction profiles directly to the execution pipeline
+            _physicsSystem.Simulate(settings, Time.fixedDeltaTime / 3, BoundsMin, BoundsMax, mouseWorldPos, currentStrength);
+        }
     }
 
     void LateUpdate()

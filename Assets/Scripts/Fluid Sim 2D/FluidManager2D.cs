@@ -26,16 +26,42 @@ public class FluidManager2D : MonoBehaviour
     float _lastSmoothness;
     bool _lastShowDensity;
 
+    float _lastMass;
+    float _lastPressureMultiplier;
+    float _lastTargetDensity;
+    float _lastCollisionDamping;
+
     void Awake()
     {
+        Debug.Log("FluidManager2D Awake called.");
+
         if (cameraRef == null)
         {
             cameraRef = Camera.main;
         }
+        if (settings != null)
+        {
+            settings.OnChanged += OnSettingsChanged;
+        }
+
+    }
+
+    void OnEnable()
+    {
+        // 1. Hook up the event listener
+        if (settings != null)
+        {
+            settings.OnChanged -= OnSettingsChanged; // Avoid double-subscribing
+            settings.OnChanged += OnSettingsChanged;
+        }
+
+        // 2. Force full setup on enable so Edit Mode works immediately
+        InitializeSystems();
     }
 
     void Start()
     {
+        Debug.Log("FluidManager2D Start called.");
         if (settings != null)
         {
             settings.OnChanged += OnSettingsChanged;
@@ -46,17 +72,36 @@ public class FluidManager2D : MonoBehaviour
 
     void OnValidate()
     {
-        if (Application.isPlaying)
+        Debug.Log("FluidManager2D OnValidate called.");
+        // Guard against execution if dependencies aren't configured yet
+        if (settings == null || fluidComputeShader == null)
         {
+
+            Debug.Log("FluidManager2D OnValidate: Missing settings or compute shader reference.");
             return;
         }
 
         if (cameraRef == null)
         {
+            Debug.Log("FluidManager2D OnValidate: Camera reference is null. Attempting to assign Camera.main.");
             cameraRef = Camera.main;
+            if (cameraRef == null) return;
         }
 
-        InitializeSystems();
+        // When in editing mode (stopped), any inspector adjustment should force a full generation 
+        // and trigger an explicit scene view repaint so that rendering systems can reflect changes.
+        if (!Application.isPlaying)
+        {
+            Debug.Log("FluidManager2D OnValidate: Not playing, reinitializing systems.");
+            InitializeSystems();
+
+#if UNITY_EDITOR
+            Debug.Log("FluidManager2D OnValidate: Forcing SceneView repaint.");
+            // Force the Editor Scene View to instantly redraw its graphics context
+            UnityEditor.SceneView.RepaintAll();
+#endif
+            return;
+        }
     }
 
     void Update()
@@ -71,8 +116,11 @@ public class FluidManager2D : MonoBehaviour
 
     void LateUpdate()
     {
-        if (!Application.isPlaying || !_initialized)
+        Debug.Log("FluidManager2D LateUpdate called.");
+        // ALLOW rendering to execute in the Editor scene view even when the game is not playing
+        if (!_initialized)
         {
+            Debug.Log("FluidManager2D LateUpdate: Not initialized, skipping rendering.");
             return;
         }
 
@@ -183,11 +231,10 @@ public class FluidManager2D : MonoBehaviour
 
     void OnSettingsChanged()
     {
-        if (settings == null || !Application.isPlaying)
-        {
-            return;
-        }
+        // Only use the runtime change detection filtering when the simulation is active.
+        if (settings == null || !_initialized) return;
 
+        // Changing particle layout properties means we reconstruct buffers
         bool requiresReinitialize =
             _lastParticleCount != settings.particleCount ||
             _lastRadius != settings.radius ||
@@ -195,10 +242,27 @@ public class FluidManager2D : MonoBehaviour
             _lastParticleSpacing != settings.particleSpacing ||
             _lastSegments != settings.segments;
 
+        // Changing mechanical traits updates constants on the GPU
+        bool physicsChange =
+            _lastSmoothingRadius != settings.smoothingRadius ||
+            _lastMass != settings.mass ||
+            _lastPressureMultiplier != settings.pressureMultiplier ||
+            _lastTargetDensity != settings.targetDensity ||
+            _lastCollisionDamping != settings.collisionDamping;
+
+        Debug.Log($"Settings changed. Reinitialize: {requiresReinitialize}, Physics change: {physicsChange}");
+
         if (requiresReinitialize)
         {
             InitializeSystems();
             return;
+        }
+
+        if (physicsChange)
+        {
+            // Note: Since BindStaticUniforms might be private inside your script, 
+            // make sure it is public or expose a designated UpdateUniforms method.
+            _physicsSystem.BindStaticUniforms(settings);
         }
 
         if (_lastColor != settings.particleColor || _lastSmoothness != settings.smoothness)
@@ -216,6 +280,10 @@ public class FluidManager2D : MonoBehaviour
 
     void CacheSettings()
     {
+        _lastMass = settings.mass;
+        _lastPressureMultiplier = settings.pressureMultiplier;
+        _lastTargetDensity = settings.targetDensity;
+        _lastCollisionDamping = settings.collisionDamping;
         _lastParticleCount = settings.particleCount;
         _lastSegments = settings.segments;
         _lastRadius = settings.radius;

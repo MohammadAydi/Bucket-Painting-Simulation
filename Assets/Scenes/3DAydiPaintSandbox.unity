@@ -152,7 +152,6 @@ MonoBehaviour:
   settings: {fileID: 11400000, guid: e935e18c03d419345ab1e0a4542d807e, type: 2}
   fluidComputeShader: {fileID: 7200000, guid: 7433be18ba63a634abc5123f294dbfe7, type: 3}
   particleMaterial: {fileID: 2100000, guid: 844544271cbfcc8428cda7c6a1428bd6, type: 2}
-  densityFieldMaterial: {fileID: 2100000, guid: 4f41bd09a9afe7b4ba1ce5483003cb7f, type: 2}
 --- !u!4 &262373073
 Transform:
   m_ObjectHideFlags: 0
@@ -554,7 +553,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.46474, y: -0, z: 8.13196}
-  m_LocalScale: {x: 2.4222, y: 1, z: 1.3325}
+  m_LocalScale: {x: 0.85927546, y: 1, z: 1.3325}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}

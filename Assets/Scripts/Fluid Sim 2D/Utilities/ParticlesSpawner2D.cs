@@ -16,7 +16,7 @@ namespace Rendering {
 
             int particlesPerRow = (int)Sqrt(n);
             int particlesPerCol = (n - 1) / particlesPerRow + 1;
-            float spacing = _settings.smoothingRadius * 2 + _settings.particleSpacing; // <-- fix
+            float spacing = _settings.radius * 2 + _settings.particleSpacing; // <-- fix
 
             for (int i = 0; i < n; i++) {
                 float x = (i % particlesPerRow - particlesPerRow / 2f + 0.5f) * spacing;
@@ -27,12 +27,11 @@ namespace Rendering {
             return positions;
         }
 
-        public (Vector2[], float[]) RandomSpawnParticles(Vector2 boundsMin, Vector2 boundsMax) {
+        public Vector2[] RandomSpawnParticles(Vector2 boundsMin, Vector2 boundsMax) {
             Debug.Log("boundsMin: " + boundsMin + ", boundsMax: " + boundsMax);
             int n = _settings.particleCount;
 
             Vector2[] positions = new Vector2[n];
-            float[] particleProperties = new float[n];
 
             float padding = _settings.radius;
 
@@ -48,10 +47,9 @@ namespace Rendering {
                 );
 
                 positions[i] = new Vector2(x, y);
-                particleProperties[i] = ExampleFunc(positions[i]);
             }
 
-            return (positions, particleProperties);
+            return positions;
         }
 
         float ExampleFunc(Vector2 samplePoint) {

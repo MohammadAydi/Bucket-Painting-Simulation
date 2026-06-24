@@ -12,7 +12,7 @@ public sealed class SpawnSystem2D
 
     public ParticleData2D[] SpawnParticles(Vector2 boundsMin, Vector2 boundsMax)
     {
-        Vector2[] positions = _particlesSpawner.RandomSpawnParticles(boundsMin, boundsMax).Item1;
+        Vector2[] positions = _particlesSpawner.SpawnGridParticles();
         ParticleData2D[] particles = new ParticleData2D[positions.Length];
 
         for (int i = 0; i < positions.Length; i++)

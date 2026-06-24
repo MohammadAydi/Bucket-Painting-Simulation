@@ -7,10 +7,16 @@ public sealed class RenderSystem2D : IDisposable
     static readonly int ParticlesId = Shader.PropertyToID("_Particles");
     static readonly int ParticleRadiusId = Shader.PropertyToID("_ParticleRadius");
     static readonly int ColorId = Shader.PropertyToID("_Color");
+    
+    // New Shader Property IDs
+    static readonly int UseSpeedColorId = Shader.PropertyToID("_UseSpeedColor");
+    static readonly int VelocityMaxId = Shader.PropertyToID("_VelocityMax");
+    static readonly int GradientTexId = Shader.PropertyToID("_GradientTex");
 
     readonly Material _material;
     readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
     Mesh _mesh;
+    Texture2D _gradientTexture; // Holds the baked gradient representation
 
     public RenderSystem2D(Material material)
     {
@@ -28,6 +34,46 @@ public sealed class RenderSystem2D : IDisposable
     {
         _material.SetFloat(ParticleRadiusId, settings.radius);
         _material.SetColor(ColorId, settings.particleColor);
+
+        // Send visualization states down to the shader
+        _material.SetFloat(UseSpeedColorId, settings.useSpeedColor ? 1f : 0f);
+        _material.SetFloat(VelocityMaxId, settings.velocityDisplayMax);
+
+        // Bake and assign the texture array
+        UpdateGradientTexture(settings.colourMap, settings.gradientResolution);
+        if (_gradientTexture != null)
+        {
+            _material.SetTexture(GradientTexId, _gradientTexture);
+        }
+    }
+
+    private void UpdateGradientTexture(Gradient gradient, int resolution)
+    {
+        // Recreate the texture reference safely if resolution setting shifts
+        if (_gradientTexture == null || _gradientTexture.width != resolution)
+        {
+            if (_gradientTexture != null)
+            {
+                if (Application.isPlaying) UnityEngine.Object.Destroy(_gradientTexture);
+                else UnityEngine.Object.DestroyImmediate(_gradientTexture);
+            }
+
+            _gradientTexture = new Texture2D(resolution, 1, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+        }
+
+        // Evaluate and write gradient colors across pixels
+        Color[] colors = new Color[resolution];
+        for (int i = 0; i < resolution; i++)
+        {
+            float t = (float)i / (resolution - 1);
+            colors[i] = gradient.Evaluate(t);
+        }
+        _gradientTexture.SetPixels(colors);
+        _gradientTexture.Apply();
     }
 
     public void RebuildMesh(int segments)
@@ -70,17 +116,24 @@ public sealed class RenderSystem2D : IDisposable
 
     public void Dispose()
     {
-        if (_mesh == null)
+        if (_mesh != null)
         {
-            return;
+            if (Application.isPlaying)
+                UnityEngine.Object.Destroy(_mesh);
+            else
+                UnityEngine.Object.DestroyImmediate(_mesh);
+            _mesh = null;
         }
 
-        if (Application.isPlaying)
-            UnityEngine.Object.Destroy(_mesh);
-        else
-            UnityEngine.Object.DestroyImmediate(_mesh);
-
-        _mesh = null;
+        // Prevent memory leaks by properly releasing the generated texture
+        if (_gradientTexture != null)
+        {
+            if (Application.isPlaying)
+                UnityEngine.Object.Destroy(_gradientTexture);
+            else
+                UnityEngine.Object.DestroyImmediate(_gradientTexture);
+            _gradientTexture = null;
+        }
     }
 
     static Mesh CreateCircleMesh(int segments)

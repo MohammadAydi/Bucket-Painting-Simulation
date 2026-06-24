@@ -16,7 +16,7 @@ public class SphericalPendulum : MonoBehaviour
 
     [Header("Suspension (التعليق)")]
     [Tooltip("Rope length l (meters).")]
-    [SerializeField, Min(0.01f)] public float length = 1.0f;
+    [SerializeField, Min(0.01f)] public float length = 1.2f;
 
     [Header("Motion - initial conditions (الحركة)")]
     [Tooltip("Initial polar angle theta_0 from the downward vertical (deg).")]
@@ -44,7 +44,7 @@ public class SphericalPendulum : MonoBehaviour
 
     [Header("Bucket / Bob (الدلو)")]
     [Tooltip("Bucket mass m (kg). Heavier = slower aerodynamic decay.")]
-    [SerializeField, Min(0.001f)] private float mass = 2.0f;
+    [SerializeField, Min(0.001f)] private float mass = 3.0f;
 
     [Tooltip("Bucket radius (m). Frontal area used for drag = pi * r^2.")]
     [SerializeField, Min(0f)] private float bucketRadius = 0.12f;

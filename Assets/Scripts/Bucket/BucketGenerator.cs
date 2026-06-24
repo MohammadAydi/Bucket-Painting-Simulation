@@ -10,18 +10,18 @@ public class BucketGenerator : MonoBehaviour
     public BucketShape shape = BucketShape.Circular;
 
     [Header("Bucket Dimensions")]
-    public float topRadius = 2.0f;
-    public float bottomRadius = 1.5f;
-    public float height = 3.0f;
-    public float thickness = 0.2f;
+    public float topRadius = 0.13f;
+    public float bottomRadius = 0.11f;
+    public float height = 0.28f;
+    public float thickness = 0.01f;
 
     [Header("Mesh Settings")]
     [Range(3, 128)]
-    public int segments = 64;
+    public int segments = 128;
     [Range(2, 50)]
-    public int heightSubdivisions = 25;
+    public int heightSubdivisions = 50;
     [Range(2, 50)]
-    public int floorSubdivisions = 25;
+    public int floorSubdivisions = 50;
 
     [Header("Compartments (Pizza Slots)")]
     public List<float> compartmentRatios = new List<float>();

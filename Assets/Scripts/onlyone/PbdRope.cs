@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 
 [DisallowMultipleComponent]
@@ -19,10 +18,10 @@ public sealed class PbdRope : MonoBehaviour
     private int segments = 30;
 
     [Tooltip("Total rope rest length (m). Greater than pivot→bob chord → visible sag.")] [SerializeField, Min(0.01f)]
-    private float ropeLength =  1.01f;
+    private float ropeLength =  0.55f;
 
     [Tooltip("Rope visual diameter (m).")] [SerializeField, Min(0.0005f)]
-    private float ropeWidth = 0.015f;
+    private float ropeWidth = 0.008f;
 
     [Tooltip("Linear mass density (kg / m). Heavier rope sags more and reacts differently.")]
     [SerializeField, Range(0.001f, 10f)]
@@ -31,17 +30,17 @@ public sealed class PbdRope : MonoBehaviour
     [Header("Solver")]
     [Tooltip("Gauss-Seidel iterations per sub-step. Higher → stiffer / less stretch.")]
     [SerializeField, Range(1, 80)]
-    private int constraintIterations = 50;
+    private int constraintIterations = 25;
 
     [Tooltip("XPBD compliance (m / N). 0 = perfectly rigid; larger = softer rope.")] [SerializeField, Min(0f)]
     private float compliance = 1e-5f;
 
     [Tooltip("Per-sub-step velocity retention. 1 = undamped; 0.98 = light air drag.")] [SerializeField, Range(0.8f, 1f)]
-    private float damping = 0.97f;
+    private float damping = 0.96f;
 
     [Tooltip("Hard upper stretch cap per segment. 1.0 = inextensible; 1.05 = 5 % slack allowed.")]
     [SerializeField, Range(1f, 1.2f)]
-    private float stretchLimit = 1.02f;
+    private float stretchLimit = 1.1f;
 
     [Header("Forces")] [Tooltip("Gravitational acceleration magnitude (m / s²).")] [SerializeField]
     private float gravity = 9.81f;
@@ -55,9 +54,12 @@ public sealed class PbdRope : MonoBehaviour
     private float fixedStep = 0.004f;
 
     [Header("Rigid Mode")] [Tooltip("خط مستقيم تماماً بدون فيزياء — لا التواء ولا رجة")] [SerializeField]
-    private bool rigidMode = false;
+    private bool rigidMode;
  
-
+    [Header("Rope Attachment Override")]
+    [Tooltip("إذا عيّنت هنا Transform، سيتصل طرف الحبل السفلي بهذه النقطة بدلاً من Bob العادي")]
+    [SerializeField] private Transform bobOverride;
+    
     private LineRenderer lr;
     private int n;
     private float segLen;
@@ -111,11 +113,13 @@ public sealed class PbdRope : MonoBehaviour
     {
         if (!ready) return;
         if (rigidMode)
-        {
+        { 
+            Vector3 bobTarget = (bobOverride) ? bobOverride.position : bob.position;
+        
             for (int i = 0; i < n; i++)
             {
                 float t = (float)i / segments;
-                renderPos[i] = Vector3.Lerp(pivot.position, bob.position, t);
+                renderPos[i] = Vector3.Lerp(pivot.position, bobTarget, t);
             }
 
             Render();
@@ -252,14 +256,16 @@ public sealed class PbdRope : MonoBehaviour
 
     private void PinEndpoints(bool trackVelocity)
     {
+        Vector3 bobTarget = (bobOverride) ? bobOverride.position : bob.position;
+
         if (trackVelocity)
         {
-            prev[0] = pos[0];
+            prev[0]     = pos[0];
             prev[n - 1] = pos[n - 1];
         }
 
-        pos[0] = pivot.position;
-        pos[n - 1] = bob.position;
+        pos[0]     = pivot.position;
+        pos[n - 1] = bobTarget;
     }
 
 

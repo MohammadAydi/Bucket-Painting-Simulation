@@ -8,9 +8,9 @@ static const int NumThreads = 64;
 
 struct ParticleData
 {
-    float2 position;
-    float2 velocity;
-    float2 force;
+    float4 position;
+    float4 velocity;
+    float4 force;
     float density;
     float pressure;
 };
@@ -25,17 +25,19 @@ float _PressureMultiplier;
 float _TargetDensity;
 float _ParticleRadius;
 float _CollisionDamping;
-float2 _BoundsMin;
-float2 _BoundsMax;
+float3 _BoundaryLocalMin;
+float3 _BoundaryLocalMax;
+float4x4 _BoundaryWorldToLocal;
+float4x4 _BoundaryLocalToWorld;
 
 float SmoothingKernel(float radius, float dst)
 {
     if (dst >= radius)
         return 0.0;
 
-    float volume = UNITY_PI * pow(radius, 4) / 6.0;
-    float diff = radius - dst;
-    return diff * diff / volume;
+    float diff = radius * radius - dst * dst;
+    float volume = 315.0 / (64.0 * UNITY_PI * pow(radius, 9));
+    return diff * diff * diff * volume;
 }
 
 float SmoothingKernelDerivative(float dst, float radius)
@@ -43,8 +45,9 @@ float SmoothingKernelDerivative(float dst, float radius)
     if (dst >= radius)
         return 0.0;
 
-    float scale = 12.0 / (pow(radius, 4) * UNITY_PI);
-    return (dst - radius) * scale;
+    float diff = radius - dst;
+    float scale = -45.0 / (UNITY_PI * pow(radius, 6));
+    return diff * diff * scale;
 }
 
 float DensityToPressure(float density)
@@ -64,13 +67,13 @@ void UpdateDensities(uint3 id : SV_DispatchThreadID)
 
     for (int i = 0; i < _ParticleCount; i++)
     {
-        float dst = distance(_Particles[i].position, particle.position);
+        float dst = distance(_Particles[i].position.xyz, particle.position.xyz);
         density += _Mass * SmoothingKernel(_SmoothingRadius, dst);
     }
 
     particle.density = density;
     particle.pressure = DensityToPressure(density);
-    particle.force = float2(0.0, 0.0);
+    particle.force = float4(0.0, 0.0, 0.0, 0.0);
     _Particles[id.x] = particle;
 }
 
@@ -81,7 +84,7 @@ void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
         return;
 
     ParticleData particle = _Particles[id.x];
-    float2 pressureForce = float2(0.0, 0.0);
+    float3 pressureForce = float3(0.0, 0.0, 0.0);
 
     for (int i = 0; i < _ParticleCount; i++)
     {
@@ -89,9 +92,9 @@ void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
             continue;
 
         ParticleData other = _Particles[i];
-        float2 offset = other.position - particle.position;
+        float3 offset = other.position.xyz - particle.position.xyz;
         float dst = length(offset);
-        float2 dir = dst > 0.0 ? offset / dst : float2(0.0, 0.0);
+        float3 dir = dst > 0.0 ? offset / dst : float3(0.0, 0.0, 0.0);
         float slope = SmoothingKernelDerivative(dst, _SmoothingRadius);
         float sharedPressure = (particle.pressure + other.pressure) * 0.5;
         float density = max(other.density, 0.0001);
@@ -99,7 +102,7 @@ void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
         pressureForce += dir * (sharedPressure * slope * _Mass) / density;
     }
 
-    particle.force = pressureForce;
+    particle.force = float4(pressureForce, 0.0);;
     _Particles[id.x] = particle;
 }
 
@@ -112,33 +115,49 @@ void Integrate(uint3 id : SV_DispatchThreadID)
     ParticleData particle = _Particles[id.x];
     float density = max(particle.density, 0.0001);
 
-    particle.velocity += (particle.force / density) * _DeltaTime;
-    particle.position += particle.velocity * _DeltaTime;
+    particle.velocity.xyz += (particle.force.xyz / density) * _DeltaTime;
+    particle.position.xyz += particle.velocity.xyz * _DeltaTime;
 
-    float2 minBound = _BoundsMin + _ParticleRadius;
-    float2 maxBound = _BoundsMax - _ParticleRadius;
+    float3 positionLocal = mul(_BoundaryWorldToLocal, float4(particle.position.xyz, 1.0)).xyz;
+    float3 velocityLocal = mul((float3x3)_BoundaryWorldToLocal, particle.velocity.xyz);
+    float3 minBound = _BoundaryLocalMin + _ParticleRadius;
+    float3 maxBound = _BoundaryLocalMax - _ParticleRadius;
 
-    if (particle.position.x < minBound.x)
+    if (positionLocal.x < minBound.x)
     {
-        particle.position.x = minBound.x;
-        particle.velocity.x *= -_CollisionDamping;
+        positionLocal.x = minBound.x;
+        velocityLocal.x *= -_CollisionDamping;
     }
-    else if (particle.position.x > maxBound.x)
+    else if (positionLocal.x > maxBound.x)
     {
-        particle.position.x = maxBound.x;
-        particle.velocity.x *= -_CollisionDamping;
+        positionLocal.x = maxBound.x;
+        velocityLocal.x *= -_CollisionDamping;
     }
 
-    if (particle.position.y < minBound.y)
+    if (positionLocal.y < minBound.y)
     {
-        particle.position.y = minBound.y;
-        particle.velocity.y *= -_CollisionDamping;
+        positionLocal.y = minBound.y;
+        velocityLocal.y *= -_CollisionDamping;
     }
-    else if (particle.position.y > maxBound.y)
+    else if (positionLocal.y > maxBound.y)
     {
-        particle.position.y = maxBound.y;
-        particle.velocity.y *= -_CollisionDamping;
+        positionLocal.y = maxBound.y;
+        velocityLocal.y *= -_CollisionDamping;
     }
+
+    if (positionLocal.z < minBound.z)
+    {
+        positionLocal.z = minBound.z;
+        velocityLocal.z *= -_CollisionDamping;
+    }
+    else if (positionLocal.z > maxBound.z)
+    {
+        positionLocal.z = maxBound.z;
+        velocityLocal.z *= -_CollisionDamping;
+    }
+
+    particle.position.xyz = mul(_BoundaryLocalToWorld, float4(positionLocal, 1.0)).xyz;
+    particle.velocity.xyz = mul((float3x3)_BoundaryLocalToWorld, velocityLocal);
 
     _Particles[id.x] = particle;
 }

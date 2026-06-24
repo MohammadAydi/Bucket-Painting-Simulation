@@ -8,10 +8,10 @@ public class BucketHandleGenerator : MonoBehaviour
     [SerializeField] private BucketGenerator bucketGenerator;
 
     [Header("Handle Dimensions")]
-    [Range(0.02f, 0.2f)] public float handleWidth = 0.05f;       
-    [Range(0.01f, 0.1f)] public float handleThickness = 0.02f;   
-    [Range(8, 64)] public int handleSegments = 32;               
-    public float clearance = 0.05f;                              
+    [Range(0.0002f, 0.2f)] public float handleWidth =0.0131f;
+    [Range(0.0001f, 0.1f)] public float handleThickness = 0.0083f;  
+    [Range(8, 64)] public int handleSegments = 40;               
+    public float clearance = 0.001f;                              
 
     private MeshFilter meshFilter;
     private Mesh handleMesh;
@@ -119,13 +119,5 @@ public class BucketHandleGenerator : MonoBehaviour
         handleMesh.triangles = triangles.ToArray();
         handleMesh.RecalculateNormals();
         handleMesh.RecalculateBounds();
-    }
-    public Vector3 GetHandleMidPoint()
-    {
-        float R = bucketGenerator.topRadius + clearance;
-        float h = bucketGenerator.height;
- 
-        Vector3 localMid = new Vector3(0f, h + R, 0f);
-        return transform.TransformPoint(localMid);
-    }
+    } 
 }

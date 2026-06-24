@@ -18,10 +18,10 @@ public sealed class PbdRope : MonoBehaviour
     private int segments = 30;
 
     [Tooltip("Total rope rest length (m). Greater than pivot→bob chord → visible sag.")] [SerializeField, Min(0.01f)]
-    private float ropeLength =  1.01f;
+    private float ropeLength =  0.55f;
 
     [Tooltip("Rope visual diameter (m).")] [SerializeField, Min(0.0005f)]
-    private float ropeWidth = 0.015f;
+    private float ropeWidth = 0.008f;
 
     [Tooltip("Linear mass density (kg / m). Heavier rope sags more and reacts differently.")]
     [SerializeField, Range(0.001f, 10f)]
@@ -30,17 +30,17 @@ public sealed class PbdRope : MonoBehaviour
     [Header("Solver")]
     [Tooltip("Gauss-Seidel iterations per sub-step. Higher → stiffer / less stretch.")]
     [SerializeField, Range(1, 80)]
-    private int constraintIterations = 50;
+    private int constraintIterations = 25;
 
     [Tooltip("XPBD compliance (m / N). 0 = perfectly rigid; larger = softer rope.")] [SerializeField, Min(0f)]
     private float compliance = 1e-5f;
 
     [Tooltip("Per-sub-step velocity retention. 1 = undamped; 0.98 = light air drag.")] [SerializeField, Range(0.8f, 1f)]
-    private float damping = 0.97f;
+    private float damping = 0.96f;
 
     [Tooltip("Hard upper stretch cap per segment. 1.0 = inextensible; 1.05 = 5 % slack allowed.")]
     [SerializeField, Range(1f, 1.2f)]
-    private float stretchLimit = 1.02f;
+    private float stretchLimit = 1.1f;
 
     [Header("Forces")] [Tooltip("Gravitational acceleration magnitude (m / s²).")] [SerializeField]
     private float gravity = 9.81f;

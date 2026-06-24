@@ -8,6 +8,8 @@ public class ParticleSettings : ScriptableObject
     public int particleCount = 100;
     [Range(0.01f, 1f)]
     public float radius = 0.1f;
+    [Range(3, 32)]
+    public int segments = 8;
 
     // Number of subdivisions for the icosphere mesh (0 = octahedron, 1–4 = smoother).
     // Matches SphereGenerator.GenerateSphereMesh(resolution).
@@ -15,12 +17,17 @@ public class ParticleSettings : ScriptableObject
     public int sphereResolution = 2;
 
     [Header("Appearance")]
-    [Range(0.01f, 10)]
+    [Range(0.0001f, 10)]
     public float particleSpacing = 1f;
+    public Color particleColor = new Color(0f, 0f, 0f, 1f);
+    public bool useVertexColor = false;
+
 
     // ── Velocity-based colour gradient ───────────────────────────────────────
     // Gradient is baked into a 1-D texture inside RenderSystem3D and sampled
     // in the shader based on each particle's speed (0 → velocityDisplayMax).
+    [Header("Velocity Visualization")]
+    public bool useSpeedColor = false; // Added toggle variable here
     public Gradient colourMap = DefaultGradient();
     [Range(16, 256)]
     public int gradientResolution = 128;
@@ -34,9 +41,9 @@ public class ParticleSettings : ScriptableObject
     [Range(0.01f, 4f)]
     public float smoothingRadius = 1f;
 
-    public Color lowDensityColor    = new Color(0.1266f, 0.5330f, 0.6886f, 1f);
-    public Color TargetDensityColor = new Color(1f,      1f,      1f,      1f);
-    public Color highDensityColor   = new Color(0.8301f, 0.2914f, 0.2075f, 1f);
+    public Color lowDensityColor = new Color(0.1266f, 0.5330f, 0.6886f, 1f);
+    public Color TargetDensityColor = new Color(1f, 1f, 1f, 1f);
+    public Color highDensityColor = new Color(0.8301f, 0.2914f, 0.2075f, 1f);
 
     [Header("Physics")]
     [Range(0, 20)]
@@ -50,12 +57,7 @@ public class ParticleSettings : ScriptableObject
 
     // ── Legacy─────────
     // (segments was used by the 2d circle mesh)
-    [HideInInspector]
-    public int segments = 8;
-    [HideInInspector]
-    public Color particleColor = Color.white;
-    [HideInInspector]
-    public bool useVertexColor = false;
+
 
     public System.Action OnChanged;
 

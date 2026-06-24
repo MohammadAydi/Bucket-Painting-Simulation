@@ -4,7 +4,7 @@ using UnityEngine;
 public sealed class PhysicsSystem3D : IDisposable
 {
     const int ThreadsPerGroup = 64;
-    const int ParticleStride = 32;
+    const int ParticleStride = 56;
 
     static readonly int ParticleCountId = Shader.PropertyToID("_ParticleCount");
     static readonly int DeltaTimeId = Shader.PropertyToID("_DeltaTime");
@@ -14,8 +14,10 @@ public sealed class PhysicsSystem3D : IDisposable
     static readonly int TargetDensityId = Shader.PropertyToID("_TargetDensity");
     static readonly int ParticleRadiusId = Shader.PropertyToID("_ParticleRadius");
     static readonly int CollisionDampingId = Shader.PropertyToID("_CollisionDamping");
-    static readonly int BoundsMinId = Shader.PropertyToID("_BoundsMin");
-    static readonly int BoundsMaxId = Shader.PropertyToID("_BoundsMax");
+    static readonly int BoundaryLocalMinId = Shader.PropertyToID("_BoundaryLocalMin");
+    static readonly int BoundaryLocalMaxId = Shader.PropertyToID("_BoundaryLocalMax");
+    static readonly int BoundaryWorldToLocalId = Shader.PropertyToID("_BoundaryWorldToLocal");
+    static readonly int BoundaryLocalToWorldId = Shader.PropertyToID("_BoundaryLocalToWorld");
     static readonly int ParticlesId = Shader.PropertyToID("_Particles");
 
     readonly ComputeShader _computeShader;
@@ -49,18 +51,24 @@ public sealed class PhysicsSystem3D : IDisposable
         _particlesBuffer = new ComputeBuffer(ParticleCount, ParticleStride, ComputeBufferType.Structured);
         _particlesBuffer.SetData(particles);
 
-        BindSharedParameters(settings, 0f, Vector2.zero, Vector2.zero);
+        BindSharedParameters(settings, 0f, Vector3.zero, Vector3.zero, Matrix4x4.identity, Matrix4x4.identity);
         BindBuffers();
     }
 
-    public void Simulate(ParticleSettings settings, float deltaTime, Vector2 boundsMin, Vector2 boundsMax)
+    public void Simulate(
+        ParticleSettings settings,
+        float deltaTime,
+        Vector3 boundaryLocalMin,
+        Vector3 boundaryLocalMax,
+        Matrix4x4 worldToLocal,
+        Matrix4x4 localToWorld)
     {
         if (_particlesBuffer == null || ParticleCount == 0)
         {
             return;
         }
 
-        BindSharedParameters(settings, deltaTime, boundsMin, boundsMax);
+        BindSharedParameters(settings, deltaTime, boundaryLocalMin, boundaryLocalMax, worldToLocal, localToWorld);
         BindBuffers();
 
         int groups = Mathf.CeilToInt(ParticleCount / (float)ThreadsPerGroup);
@@ -74,7 +82,13 @@ public sealed class PhysicsSystem3D : IDisposable
         DisposeBuffers();
     }
 
-    void BindSharedParameters(ParticleSettings settings, float deltaTime, Vector2 boundsMin, Vector2 boundsMax)
+    void BindSharedParameters(
+        ParticleSettings settings,
+        float deltaTime,
+        Vector3 boundaryLocalMin,
+        Vector3 boundaryLocalMax,
+        Matrix4x4 worldToLocal,
+        Matrix4x4 localToWorld)
     {
         _computeShader.SetInt(ParticleCountId, ParticleCount);
         _computeShader.SetFloat(DeltaTimeId, deltaTime);
@@ -84,8 +98,10 @@ public sealed class PhysicsSystem3D : IDisposable
         _computeShader.SetFloat(TargetDensityId, settings.targetDensity);
         _computeShader.SetFloat(ParticleRadiusId, settings.radius);
         _computeShader.SetFloat(CollisionDampingId, settings.collisionDamping);
-        _computeShader.SetVector(BoundsMinId, boundsMin);
-        _computeShader.SetVector(BoundsMaxId, boundsMax);
+        _computeShader.SetVector(BoundaryLocalMinId, boundaryLocalMin);
+        _computeShader.SetVector(BoundaryLocalMaxId, boundaryLocalMax);
+        _computeShader.SetMatrix(BoundaryWorldToLocalId, worldToLocal);
+        _computeShader.SetMatrix(BoundaryLocalToWorldId, localToWorld);
     }
 
     void BindBuffers()

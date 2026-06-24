@@ -25,9 +25,9 @@ Shader "Fluid/DensityField3D"
 
             struct ParticleData
             {
-                float2 position;
-                float2 velocity;
-                float2 force;
+                float4 position;
+                float4 velocity;
+                float4 force;
                 float density;
                 float pressure;
             };
@@ -50,14 +50,14 @@ Shader "Fluid/DensityField3D"
             struct v2f
             {
                 float4 pos : SV_POSITION;
-                float2 worldPos : TEXCOORD0;
+                float3 worldPos : TEXCOORD0;
             };
 
             v2f vert(appdata v)
             {
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xy;
+                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 return o;
             }
 
@@ -66,18 +66,18 @@ Shader "Fluid/DensityField3D"
                 if (dst >= radius)
                     return 0.0;
 
-                float volume = UNITY_PI * pow(radius, 4) / 6.0;
-                float diff = radius - dst;
-                return diff * diff / volume;
+                float diff = radius * radius - dst * dst;
+                float volume = 315.0 / (64.0 * UNITY_PI * pow(radius, 9));
+                return diff * diff * diff * volume;
             }
 
-            float CalculateDensity(float2 samplePoint)
+            float CalculateDensity(float3 samplePoint)
             {
                 float density = 0.0;
 
                 for (int i = 0; i < _ParticleCount; i++)
                 {
-                    float dst = distance(_Particles[i].position, samplePoint);
+                    float dst = distance(_Particles[i].position.xyz, samplePoint);
                     density += _Mass * SmoothingKernel(_SmoothingRadius, dst);
                 }
 

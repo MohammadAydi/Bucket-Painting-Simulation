@@ -15,12 +15,12 @@ public sealed class DensityRenderSystem3D : IDisposable
 
     readonly Material _material;
     readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
-    readonly Mesh _quadMesh;
+    readonly Mesh _cubeMesh;
 
     public DensityRenderSystem3D(Material material)
     {
         _material = material;
-        _quadMesh = CreateQuadMesh();
+        _cubeMesh = CreateCubeMesh();
     }
 
     public void SyncMaterial(ParticleSettings settings, ComputeBuffer particlesBuffer)
@@ -40,19 +40,15 @@ public sealed class DensityRenderSystem3D : IDisposable
         _material.SetColor(HighColorId, settings.highDensityColor);
     }
 
-    public void Render(Vector2 boundsMin, Vector2 boundsMax)
+    public void Render(Matrix4x4 matrix)
     {
-        if (_material == null || _quadMesh == null)
+        if (_material == null || _cubeMesh == null)
         {
             return;
         }
 
-        Vector3 center = new Vector3((boundsMin.x + boundsMax.x) * 0.5f, (boundsMin.y + boundsMax.y) * 0.5f, 0.1f);
-        Vector3 scale = new Vector3(boundsMax.x - boundsMin.x, boundsMax.y - boundsMin.y, 1f);
-        Matrix4x4 matrix = Matrix4x4.TRS(center, Quaternion.identity, scale);
-
         Graphics.DrawMesh(
-            _quadMesh,
+            _cubeMesh,
             matrix,
             _material,
             0,
@@ -68,33 +64,45 @@ public sealed class DensityRenderSystem3D : IDisposable
 
     public void Dispose()
     {
-        if (_quadMesh == null)
+        if (_cubeMesh == null)
         {
             return;
         }
 
         if (Application.isPlaying)
-            UnityEngine.Object.Destroy(_quadMesh);
+            UnityEngine.Object.Destroy(_cubeMesh);
         else
-            UnityEngine.Object.DestroyImmediate(_quadMesh);
+            UnityEngine.Object.DestroyImmediate(_cubeMesh);
     }
 
-    static Mesh CreateQuadMesh()
+    static Mesh CreateCubeMesh()
     {
         Mesh mesh = new Mesh
         {
-            name = "DensityFieldQuad"
+            name = "DensityFieldCube"
         };
 
         mesh.vertices = new[]
         {
-            new Vector3(-0.5f, -0.5f, 0f),
-            new Vector3(0.5f, -0.5f, 0f),
-            new Vector3(0.5f, 0.5f, 0f),
-            new Vector3(-0.5f, 0.5f, 0f)
+            new Vector3(-0.5f, -0.5f, -0.5f),
+            new Vector3(0.5f, -0.5f, -0.5f),
+            new Vector3(0.5f, 0.5f, -0.5f),
+            new Vector3(-0.5f, 0.5f, -0.5f),
+            new Vector3(-0.5f, -0.5f, 0.5f),
+            new Vector3(0.5f, -0.5f, 0.5f),
+            new Vector3(0.5f, 0.5f, 0.5f),
+            new Vector3(-0.5f, 0.5f, 0.5f)
         };
 
-        mesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+        mesh.triangles = new[]
+        {
+            0, 2, 1, 0, 3, 2,
+            4, 5, 6, 4, 6, 7,
+            0, 1, 5, 0, 5, 4,
+            2, 3, 7, 2, 7, 6,
+            0, 4, 7, 0, 7, 3,
+            1, 2, 6, 1, 6, 5
+        };
         mesh.RecalculateBounds();
         return mesh;
     }

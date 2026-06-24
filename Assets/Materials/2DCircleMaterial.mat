@@ -7,7 +7,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: CircleMaterial
+  m_Name: 2DCircleMaterial
   m_Shader: {fileID: 4800000, guid: 48d8edebc3e8efc45b361d2eb3bcddca, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0

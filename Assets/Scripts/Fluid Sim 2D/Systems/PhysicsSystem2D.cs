@@ -15,6 +15,7 @@ public sealed class PhysicsSystem2D : IDisposable
     static readonly int JId = Shader.PropertyToID("_J");
     static readonly int DeltaTimeId = Shader.PropertyToID("_DeltaTime");
     static readonly int MassId = Shader.PropertyToID("_Mass");
+    static readonly int GravityId = Shader.PropertyToID("_Gravity");
     static readonly int SmoothingRadiusId = Shader.PropertyToID("_SmoothingRadius");
     static readonly int PressureMultiplierId = Shader.PropertyToID("_PressureMultiplier");
     static readonly int TargetDensityId = Shader.PropertyToID("_TargetDensity");
@@ -25,6 +26,10 @@ public sealed class PhysicsSystem2D : IDisposable
     static readonly int ParticlesId = Shader.PropertyToID("_Particles");
     static readonly int SpatialLookupId = Shader.PropertyToID("_SpatialLookup");
     static readonly int StartIndicesId = Shader.PropertyToID("_StartIndices");
+
+    static readonly int InteractionInputPosId = Shader.PropertyToID("_InteractionInputPos");
+    static readonly int InteractionRadiusId = Shader.PropertyToID("_InteractionRadius");
+    static readonly int InteractionStrengthId = Shader.PropertyToID("_InteractionStrength");
 
     // ── Kernel handles ───────────────────────────────────────────────────────
     readonly ComputeShader _compute;
@@ -85,6 +90,33 @@ public sealed class PhysicsSystem2D : IDisposable
         BindAllBuffers();
     }
 
+    public void Simulate(ParticleSettings settings, float deltaTime, Vector2 boundsMin, Vector2 boundsMax, Vector2 mousePos, float interactionStrength)
+    {
+        if (_particlesBuffer == null || ParticleCount == 0) return;
+
+        // Update standard per-frame uniforms
+        _compute.SetFloat(DeltaTimeId, deltaTime);
+        _compute.SetVector(BoundsMinId, boundsMin);
+        _compute.SetVector(BoundsMaxId, boundsMax);
+
+        // NEW: Send mouse interaction data to the GPU
+        _compute.SetVector(InteractionInputPosId, mousePos);
+        _compute.SetFloat(InteractionStrengthId, interactionStrength);
+
+        int realGroups = Mathf.CeilToInt(ParticleCount / (float)ThreadsPerGroup);
+        int paddedGroups = Mathf.CeilToInt(_paddedCount / (float)ThreadsPerGroup);
+
+        // Dispatch kernels sequentially
+        _compute.Dispatch(_predictPositionsKernel, realGroups, 1, 1);
+        _compute.Dispatch(_buildSpatialLookupKernel, paddedGroups, 1, 1);
+        DispatchBitonicSort(paddedGroups);
+        _compute.Dispatch(_clearStartIndicesKernel, paddedGroups, 1, 1);
+        _compute.Dispatch(_buildStartIndicesKernel, paddedGroups, 1, 1);
+        _compute.Dispatch(_updateDensitiesKernel, realGroups, 1, 1);
+        _compute.Dispatch(_calcPressureKernel, realGroups, 1, 1);
+        _compute.Dispatch(_integrateKernel, realGroups, 1, 1);
+    }
+
     // ── Per-frame simulation ─────────────────────────────────────────────────
     public void Simulate(ParticleSettings settings, float deltaTime, Vector2 boundsMin, Vector2 boundsMax)
     {
@@ -126,11 +158,14 @@ public sealed class PhysicsSystem2D : IDisposable
         _compute.SetInt(ParticleCountId, ParticleCount);
         _compute.SetInt(PaddedCountId, _paddedCount);
         _compute.SetFloat(MassId, settings.mass);
+        _compute.SetFloat(GravityId, settings.gravity);
         _compute.SetFloat(SmoothingRadiusId, settings.smoothingRadius);
         _compute.SetFloat(PressureMultiplierId, settings.pressureMultiplier);
         _compute.SetFloat(TargetDensityId, settings.targetDensity);
         _compute.SetFloat(ParticleRadiusId, settings.radius);
         _compute.SetFloat(CollisionDampingId, settings.collisionDamping);
+        _compute.SetFloat(InteractionRadiusId, settings.interactionRadius);
+
     }
 
     void BindAllBuffers()

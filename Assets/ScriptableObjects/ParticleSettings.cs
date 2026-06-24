@@ -34,6 +34,10 @@ public class ParticleSettings : ScriptableObject
     [Range(0.1f, 50f)]
     public float velocityDisplayMax = 5f;
 
+    [Header("Mouse Interaction Settings")]
+    [SerializeField] public float interactionRadius = 3.0f;
+    [SerializeField] public float interactionStrength = 60.0f;
+
     [Header("Density Visualization")]
     public bool showDensity = true;
     [Range(0f, 1f)]
@@ -48,6 +52,9 @@ public class ParticleSettings : ScriptableObject
     [Header("Physics")]
     [Range(0, 20)]
     public float mass = 1f;
+
+    [Range(-20f, 20f)]
+    public float gravity = -9.81f;
     [Range(0f, 1f)]
     public float collisionDamping = 0.8f;
     [Range(0f, 500f)]

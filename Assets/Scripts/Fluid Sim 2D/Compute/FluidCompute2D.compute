@@ -13,7 +13,7 @@
 //  Shared constants
 // ─────────────────────────────────────────────────────────────
 static const int NumThreads = 64;
-static const uint UINT_MAX   = 0xFFFFFFFF;
+static const uint UINT_MAX = 0xFFFFFFFF;
 
 // ─────────────────────────────────────────────────────────────
 //  Structs
@@ -24,8 +24,8 @@ struct ParticleData
     float2 predictedPosition;
     float2 velocity;
     float2 force;
-    float  density;
-    float  pressure;
+    float density;
+    float pressure;
 };
 
 struct SpatialEntry
@@ -37,20 +37,21 @@ struct SpatialEntry
 // ─────────────────────────────────────────────────────────────
 //  Buffers
 // ─────────────────────────────────────────────────────────────
-RWStructuredBuffer<ParticleData>  _Particles;
-RWStructuredBuffer<SpatialEntry>  _SpatialLookup;
-RWStructuredBuffer<uint>          _StartIndices;
+RWStructuredBuffer<ParticleData> _Particles;
+RWStructuredBuffer<SpatialEntry> _SpatialLookup;
+RWStructuredBuffer<uint> _StartIndices;
 
 // ─────────────────────────────────────────────────────────────
 //  Uniforms
 // ─────────────────────────────────────────────────────────────
-int   _ParticleCount;
-int   _PaddedCount;
-int   _K;
-int   _J;
+int _ParticleCount;
+int _PaddedCount;
+int _K;
+int _J;
 
 float _DeltaTime;
 float _Mass;
+float _Gravity;
 float _SmoothingRadius;
 float _PressureMultiplier;
 float _TargetDensity;
@@ -58,6 +59,10 @@ float _ParticleRadius;
 float _CollisionDamping;
 float2 _BoundsMin;
 float2 _BoundsMax;
+
+float2 _InteractionInputPos;
+float _InteractionRadius;
+float _InteractionStrength; // Positive = Pull, Negative = Push
 
 
 // ─────────────────────────────────────────────────────────────
@@ -86,7 +91,7 @@ uint GetKey(uint hash)
 float SmoothingKernel(float radius, float dst)
 {
     if (dst >= radius) return 0.0;
-    float volume = UNITY_PI * pow(radius, 4.0) / 6.0;
+        float volume = UNITY_PI * pow(radius, 4.0) / 6.0;
     float diff = radius - dst;
     return (diff * diff) / volume;
 }
@@ -94,7 +99,7 @@ float SmoothingKernel(float radius, float dst)
 float SmoothingKernelDerivative(float dst, float radius)
 {
     if (dst >= radius) return 0.0;
-    float scale = 12.0 / (pow(radius, 4.0) * UNITY_PI);
+        float scale = 12.0 / (pow(radius, 4.0) * UNITY_PI);
     return (dst - radius) * scale;
 }
 
@@ -110,8 +115,27 @@ float DensityToPressure(float density)
 void PredictPositions(uint3 id : SV_DispatchThreadID)
 {
     if ((int)id.x >= _ParticleCount) return;
-
     ParticleData p = _Particles[id.x];
+    
+    if (_InteractionStrength != 0.0)
+    {
+        float2 offset = _InteractionInputPos - p.position;
+        float sqrDst = dot(offset, offset);
+        
+        if (sqrDst < _InteractionRadius * _InteractionRadius)
+        {
+            float dst = sqrt(sqrDst);
+            float2 dirToInputPoint = (dst <= 0.00001) ? float2(0.0, 0.0) : offset / dst;
+            float centreT = 1.0 - (dst / _InteractionRadius);
+            
+            float2 interactionForce = (dirToInputPoint * _InteractionStrength - p.velocity) * centreT;
+            
+            // NEW: Multiply by sharpness to force near-instant velocity convergence
+            p.velocity += interactionForce * _DeltaTime * 10;
+        }
+    }
+    p.velocity += float2(0.0, _Gravity) * _DeltaTime;
+
     p.predictedPosition = p.position + p.velocity * _DeltaTime;
     _Particles[id.x] = p;
 }
@@ -126,7 +150,7 @@ void BuildSpatialLookup(uint3 id : SV_DispatchThreadID)
     uint i = id.x;
     if (i >= (uint)_PaddedCount) return;
 
-    if (i < (uint)_ParticleCount)
+        if (i < (uint)_ParticleCount)
     {
         float2 pos = _Particles[i].predictedPosition;
         int2 cell = PositionToCellCoord(pos, _SmoothingRadius);
@@ -151,8 +175,8 @@ void ClearStartIndices(uint3 id : SV_DispatchThreadID)
 {
     uint i = id.x;
     if (i >= (uint)_PaddedCount) return;
-    
-    _StartIndices[i] = UINT_MAX;
+
+        _StartIndices[i]= UINT_MAX;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -164,10 +188,10 @@ void BitonicSort(uint3 id : SV_DispatchThreadID)
     uint i = id.x;
     if (i >= (uint)_PaddedCount) return;
 
-    uint ixj = i ^ (uint)_J;
+        uint ixj = i ^ (uint)_J;
     if (ixj <= i) return;
 
-    SpatialEntry a = _SpatialLookup[i];
+        SpatialEntry a = _SpatialLookup[i];
     SpatialEntry b = _SpatialLookup[ixj];
 
     bool ascending = ((i & (uint)_K) == 0);
@@ -175,8 +199,8 @@ void BitonicSort(uint3 id : SV_DispatchThreadID)
     bool shouldSwap = ascending ? (a.cellKey > b.cellKey) : (a.cellKey < b.cellKey);
     if (shouldSwap)
     {
-        _SpatialLookup[i]   = b;
-        _SpatialLookup[ixj] = a;
+        _SpatialLookup[i]= b;
+        _SpatialLookup[ixj]= a;
     }
 }
 
@@ -189,23 +213,23 @@ void BuildStartIndices(uint3 id : SV_DispatchThreadID)
     uint i = id.x;
     if (i >= (uint)_PaddedCount) return;
 
-    uint key     = _SpatialLookup[i].cellKey;
+        uint key = _SpatialLookup[i].cellKey;
     uint keyPrev = (i == 0) ? UINT_MAX : _SpatialLookup[i - 1].cellKey;
 
     if (key != keyPrev)
     {
         if (key < (uint)_PaddedCount)
         {
-            _StartIndices[key] = i;
+            _StartIndices[key]= i;
         }
     }
 }
 
-static const int2 CellOffsets[9] =
+static const int2 CellOffsets[9]=
 {
-    int2(-1, -1), int2(0, -1), int2(1, -1),
-    int2(-1,  0), int2(0,  0), int2(1,  0),
-    int2(-1,  1), int2(0,  1), int2(1,  1)
+    int2( -1, -1), int2(0, -1), int2(1, -1),
+    int2( -1, 0), int2(0, 0), int2(1, 0),
+    int2( -1, 1), int2(0, 1), int2(1, 1)
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -216,30 +240,30 @@ void UpdateDensities(uint3 id : SV_DispatchThreadID)
 {
     if ((int)id.x >= _ParticleCount) return;
 
-    float2 pos     = _Particles[id.x].predictedPosition;
-    float  sqrH    = _SmoothingRadius * _SmoothingRadius;
-    float  density = 0.0;
+        float2 pos = _Particles[id.x].predictedPosition;
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    float density = 0.0;
 
     int2 centreCell = PositionToCellCoord(pos, _SmoothingRadius);
 
     [unroll]
-    for (int n = 0; n < 9; n++)
+    for (int n = 0; n < 9; n++ )
     {
-        int2  cell    = centreCell + CellOffsets[n];
-        uint  key     = GetKey(HashCell(cell));
-        uint  start   = _StartIndices[key];
+        int2 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell));
+        uint start = _StartIndices[key];
 
         if (start == UINT_MAX) continue;
 
-        for (uint j = start; j < (uint)_PaddedCount; j++)
+            for (uint j = start; j < (uint)_PaddedCount; j++ )
         {
             SpatialEntry entry = _SpatialLookup[j];
             if (entry.cellKey != key) break;
-            if (entry.particleIndex == UINT_MAX) continue;
+                if (entry.particleIndex == UINT_MAX) continue;
 
-            float2 other = _Particles[entry.particleIndex].predictedPosition;
+                float2 other = _Particles[entry.particleIndex].predictedPosition;
             float2 delta = other - pos;
-            float  sqrD  = dot(delta, delta);
+            float sqrD = dot(delta, delta);
 
             if (sqrD <= sqrH)
             {
@@ -249,9 +273,9 @@ void UpdateDensities(uint3 id : SV_DispatchThreadID)
         }
     }
 
-    _Particles[id.x].density  = density;
+    _Particles[id.x].density = density;
     _Particles[id.x].pressure = DensityToPressure(density);
-    _Particles[id.x].force    = float2(0.0, 0.0);
+    _Particles[id.x].force = float2(0.0, 0.0);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -262,41 +286,41 @@ void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
 {
     if ((int)id.x >= _ParticleCount) return;
 
-    ParticleData self  = _Particles[id.x];
-    float2 pressForce  = float2(0.0, 0.0);
-    float  sqrH        = _SmoothingRadius * _SmoothingRadius;
+        ParticleData self = _Particles[id.x];
+    float2 pressForce = float2(0.0, 0.0);
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
 
     int2 centreCell = PositionToCellCoord(self.predictedPosition, _SmoothingRadius);
 
     [unroll]
-    for (int n = 0; n < 9; n++)
+    for (int n = 0; n < 9; n++ )
     {
-        int2  cell  = centreCell + CellOffsets[n];
-        uint  key   = GetKey(HashCell(cell));
-        uint  start = _StartIndices[key];
+        int2 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell));
+        uint start = _StartIndices[key];
 
         if (start == UINT_MAX) continue;
 
-        for (uint j = start; j < (uint)_PaddedCount; j++)
+            for (uint j = start; j < (uint)_PaddedCount; j++ )
         {
             SpatialEntry entry = _SpatialLookup[j];
-            if (entry.cellKey != key)   break;
-            if (entry.particleIndex == UINT_MAX) continue;
+            if (entry.cellKey != key) break;
+                if (entry.particleIndex == UINT_MAX) continue;
 
-            uint other_idx = entry.particleIndex;
+                uint other_idx = entry.particleIndex;
             if (other_idx == id.x) continue;
 
-            ParticleData other = _Particles[other_idx];
+                ParticleData other = _Particles[other_idx];
             float2 offset = other.predictedPosition - self.predictedPosition;
-            float  sqrD   = dot(offset, offset);
+            float sqrD = dot(offset, offset);
 
             if (sqrD > sqrH) continue;
 
-            float  dst    = sqrt(sqrD);
-            float2 dir    = (dst > 0.0) ? (offset / dst) : float2(0.0, 1.0);
-            float  slope  = SmoothingKernelDerivative(dst, _SmoothingRadius);
-            float  sharedP = (self.pressure + other.pressure) * 0.5;
-            float  density = max(other.density, 0.0001);
+                float dst = sqrt(sqrD);
+            float2 dir = (dst > 0.0) ? (offset / dst) : float2(0.0, 1.0);
+            float slope = SmoothingKernelDerivative(dst, _SmoothingRadius);
+            float sharedP = (self.pressure + other.pressure) * 0.5;
+            float density = max(other.density, 0.0001);
 
             pressForce += dir * (sharedP * slope * _Mass) / density;
         }
@@ -313,8 +337,8 @@ void Integrate(uint3 id : SV_DispatchThreadID)
 {
     if ((int)id.x >= _ParticleCount) return;
 
-    ParticleData p = _Particles[id.x];
-    float density  = max(p.density, 0.0001);
+        ParticleData p = _Particles[id.x];
+    float density = max(p.density, 0.0001);
 
     p.velocity += (p.force / density) * _DeltaTime;
     p.position += p.velocity * _DeltaTime;
@@ -328,5 +352,5 @@ void Integrate(uint3 id : SV_DispatchThreadID)
     if (p.position.y < minB.y) { p.position.y = minB.y; p.velocity.y *= -_CollisionDamping; }
     else if (p.position.y > maxB.y) { p.position.y = maxB.y; p.velocity.y *= -_CollisionDamping; }
 
-    _Particles[id.x] = p;
+    _Particles[id.x]= p;
 }

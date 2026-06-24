@@ -104,14 +104,14 @@ public class FluidManager2D : MonoBehaviour
         }
     }
 
-    void Update()
+    void FixedUpdate()
     {
         if (!Application.isPlaying || !_initialized)
         {
             return;
         }
 
-        _physicsSystem.Simulate(settings, Time.deltaTime, BoundsMin, BoundsMax);
+        _physicsSystem.Simulate(settings, Time.fixedDeltaTime, BoundsMin, BoundsMax);
     }
 
     void LateUpdate()

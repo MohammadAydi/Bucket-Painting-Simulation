@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 
 [DisallowMultipleComponent]
@@ -55,9 +54,12 @@ public sealed class PbdRope : MonoBehaviour
     private float fixedStep = 0.004f;
 
     [Header("Rigid Mode")] [Tooltip("خط مستقيم تماماً بدون فيزياء — لا التواء ولا رجة")] [SerializeField]
-    private bool rigidMode = false;
+    private bool rigidMode;
  
-
+    [Header("Rope Attachment Override")]
+    [Tooltip("إذا عيّنت هنا Transform، سيتصل طرف الحبل السفلي بهذه النقطة بدلاً من Bob العادي")]
+    [SerializeField] private Transform bobOverride;
+    
     private LineRenderer lr;
     private int n;
     private float segLen;
@@ -111,11 +113,13 @@ public sealed class PbdRope : MonoBehaviour
     {
         if (!ready) return;
         if (rigidMode)
-        {
+        { 
+            Vector3 bobTarget = (bobOverride) ? bobOverride.position : bob.position;
+        
             for (int i = 0; i < n; i++)
             {
                 float t = (float)i / segments;
-                renderPos[i] = Vector3.Lerp(pivot.position, bob.position, t);
+                renderPos[i] = Vector3.Lerp(pivot.position, bobTarget, t);
             }
 
             Render();
@@ -252,14 +256,16 @@ public sealed class PbdRope : MonoBehaviour
 
     private void PinEndpoints(bool trackVelocity)
     {
+        Vector3 bobTarget = (bobOverride) ? bobOverride.position : bob.position;
+
         if (trackVelocity)
         {
-            prev[0] = pos[0];
+            prev[0]     = pos[0];
             prev[n - 1] = pos[n - 1];
         }
 
-        pos[0] = pivot.position;
-        pos[n - 1] = bob.position;
+        pos[0]     = pivot.position;
+        pos[n - 1] = bobTarget;
     }
 
 

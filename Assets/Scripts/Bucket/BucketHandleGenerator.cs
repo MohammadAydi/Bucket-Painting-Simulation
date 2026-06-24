@@ -120,4 +120,12 @@ public class BucketHandleGenerator : MonoBehaviour
         handleMesh.RecalculateNormals();
         handleMesh.RecalculateBounds();
     }
+    public Vector3 GetHandleMidPoint()
+    {
+        float R = bucketGenerator.topRadius + clearance;
+        float h = bucketGenerator.height;
+ 
+        Vector3 localMid = new Vector3(0f, h + R, 0f);
+        return transform.TransformPoint(localMid);
+    }
 }

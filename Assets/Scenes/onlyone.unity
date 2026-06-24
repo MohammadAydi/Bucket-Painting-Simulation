@@ -166,17 +166,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PbdRope
   pivot: {fileID: 1154828093}
   bob: {fileID: 710249725}
-  segments: 14
+  segments: 30
   ropeLength: 1
-  ropeWidth: 0.02
+  ropeWidth: 0.015
   linearDensity: 0.1
-  constraintIterations: 25
+  constraintIterations: 40
   compliance: 0.00001
-  damping: 0.98
-  stretchLimit: 1.05
+  damping: 0.998
+  stretchLimit: 1.02
   gravity: 9.81
   wind: {x: 0, y: 0, z: 0}
   fixedStep: 0.004
+  rigidMode: 0
 --- !u!120 &53471986
 LineRenderer:
   serializedVersion: 3
@@ -1007,7 +1008,7 @@ MonoBehaviour:
   bob: {fileID: 710249725}
   rope: {fileID: 0}
   length: 1
-  startTheta: 30
+  startTheta: 90
   startPhi: 0
   startThetaDot: 0
   startPhiDot: 120
@@ -1019,11 +1020,6 @@ MonoBehaviour:
   bucketRadius: 0.12
   dragCoefficient: 1
   fixedStep: 0.004
-  outElapsedTime: 0
-  outSpeed: 0
-  outSwings: 0
-  outRevolutions: 0
-  outThetaDeg: 0
 --- !u!4 &1784091558
 Transform:
   m_ObjectHideFlags: 0

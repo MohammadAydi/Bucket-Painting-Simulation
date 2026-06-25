@@ -15,6 +15,7 @@ public sealed class PhysicsSystem2D : IDisposable
     static readonly int JId = Shader.PropertyToID("_J");
     static readonly int DeltaTimeId = Shader.PropertyToID("_DeltaTime");
     static readonly int MassId = Shader.PropertyToID("_Mass");
+    static readonly int GravityId = Shader.PropertyToID("_Gravity");
     static readonly int SmoothingRadiusId = Shader.PropertyToID("_SmoothingRadius");
     static readonly int PressureMultiplierId = Shader.PropertyToID("_PressureMultiplier");
     static readonly int TargetDensityId = Shader.PropertyToID("_TargetDensity");
@@ -26,6 +27,14 @@ public sealed class PhysicsSystem2D : IDisposable
     static readonly int SpatialLookupId = Shader.PropertyToID("_SpatialLookup");
     static readonly int StartIndicesId = Shader.PropertyToID("_StartIndices");
 
+    static readonly int InteractionInputPosId = Shader.PropertyToID("_InteractionInputPos");
+    static readonly int InteractionRadiusId = Shader.PropertyToID("_InteractionRadius");
+    static readonly int InteractionStrengthId = Shader.PropertyToID("_InteractionStrength");
+
+    static readonly int ViscosityCoeffId = Shader.PropertyToID("_ViscosityCoeff");
+    static readonly int SurfaceTensionCoeffId = Shader.PropertyToID("_SurfaceTensionCoeff");
+    static readonly int SurfaceTensionThresholdId = Shader.PropertyToID("_SurfaceTensionThreshold");
+
     // ── Kernel handles ───────────────────────────────────────────────────────
     readonly ComputeShader _compute;
 
@@ -36,6 +45,8 @@ public sealed class PhysicsSystem2D : IDisposable
     readonly int _buildStartIndicesKernel;
     readonly int _updateDensitiesKernel;
     readonly int _calcPressureKernel;
+    readonly int _calcViscosityKernel;
+    readonly int _calcSurfaceTensionKernel;
     readonly int _integrateKernel;
 
     // ── GPU buffers ──────────────────────────────────────────────────────────
@@ -61,6 +72,8 @@ public sealed class PhysicsSystem2D : IDisposable
         _buildStartIndicesKernel = _compute.FindKernel("BuildStartIndices");
         _updateDensitiesKernel = _compute.FindKernel("UpdateDensities");
         _calcPressureKernel = _compute.FindKernel("CalculatePressureForces");
+        _calcViscosityKernel = _compute.FindKernel("CalculateViscosityForces");
+        _calcSurfaceTensionKernel = _compute.FindKernel("CalculateSurfaceTension");
         _integrateKernel = _compute.FindKernel("Integrate");
     }
 
@@ -85,37 +98,35 @@ public sealed class PhysicsSystem2D : IDisposable
         BindAllBuffers();
     }
 
-    // ── Per-frame simulation ─────────────────────────────────────────────────
-    public void Simulate(ParticleSettings settings, float deltaTime, Vector2 boundsMin, Vector2 boundsMax)
+    public void Simulate(ParticleSettings settings, float deltaTime, Vector2 boundsMin, Vector2 boundsMax, Vector2 mousePos, float interactionStrength)
     {
         if (_particlesBuffer == null || ParticleCount == 0) return;
 
-        // Only update uniforms that change per frame
+        // Update standard per-frame uniforms
         _compute.SetFloat(DeltaTimeId, deltaTime);
         _compute.SetVector(BoundsMinId, boundsMin);
         _compute.SetVector(BoundsMaxId, boundsMax);
 
+        // NEW: Send mouse interaction data to the GPU
+        _compute.SetVector(InteractionInputPosId, mousePos);
+        _compute.SetFloat(InteractionStrengthId, interactionStrength);
+
         int realGroups = Mathf.CeilToInt(ParticleCount / (float)ThreadsPerGroup);
         int paddedGroups = Mathf.CeilToInt(_paddedCount / (float)ThreadsPerGroup);
 
-        // 0. Predict positions on GPU:
+        // Dispatch kernels sequentially
         _compute.Dispatch(_predictPositionsKernel, realGroups, 1, 1);
-
-        // 1. Build spatial lookup completely on GPU
         _compute.Dispatch(_buildSpatialLookupKernel, paddedGroups, 1, 1);
-
-        // 2. GPU bitonic sort
         DispatchBitonicSort(paddedGroups);
-
-        // 3. Clear and build start indices completely on GPU
         _compute.Dispatch(_clearStartIndicesKernel, paddedGroups, 1, 1);
         _compute.Dispatch(_buildStartIndicesKernel, paddedGroups, 1, 1);
-
-        // 4. Physics kernels
         _compute.Dispatch(_updateDensitiesKernel, realGroups, 1, 1);
         _compute.Dispatch(_calcPressureKernel, realGroups, 1, 1);
+        _compute.Dispatch(_calcViscosityKernel, realGroups, 1, 1);
+        _compute.Dispatch(_calcSurfaceTensionKernel, realGroups, 1, 1);
         _compute.Dispatch(_integrateKernel, realGroups, 1, 1);
     }
+
 
     // ── IDisposable ──────────────────────────────────────────────────────────
     public void Dispose() => DisposeBuffers();
@@ -126,11 +137,17 @@ public sealed class PhysicsSystem2D : IDisposable
         _compute.SetInt(ParticleCountId, ParticleCount);
         _compute.SetInt(PaddedCountId, _paddedCount);
         _compute.SetFloat(MassId, settings.mass);
+        _compute.SetFloat(GravityId, settings.gravity);
         _compute.SetFloat(SmoothingRadiusId, settings.smoothingRadius);
         _compute.SetFloat(PressureMultiplierId, settings.pressureMultiplier);
         _compute.SetFloat(TargetDensityId, settings.targetDensity);
         _compute.SetFloat(ParticleRadiusId, settings.radius);
         _compute.SetFloat(CollisionDampingId, settings.collisionDamping);
+        _compute.SetFloat(InteractionRadiusId, settings.interactionRadius);
+        _compute.SetFloat(ViscosityCoeffId, settings.viscosityCoeff);
+        _compute.SetFloat(SurfaceTensionCoeffId, settings.surfaceTensionCoeff);
+        _compute.SetFloat(SurfaceTensionThresholdId, settings.surfaceTensionThreshold);
+
     }
 
     void BindAllBuffers()
@@ -139,7 +156,9 @@ public sealed class PhysicsSystem2D : IDisposable
             _predictPositionsKernel,
             _buildSpatialLookupKernel, _clearStartIndicesKernel,
             _bitonicSortKernel, _buildStartIndicesKernel,
-            _updateDensitiesKernel, _calcPressureKernel, _integrateKernel
+            _updateDensitiesKernel, _calcPressureKernel,
+            _calcViscosityKernel, _calcSurfaceTensionKernel,
+            _integrateKernel
         };
 
         foreach (int k in kernels)

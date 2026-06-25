@@ -4,26 +4,32 @@ using UnityEngine;
 public class FluidManager3D : MonoBehaviour
 {
     [Header("References")]
-    [SerializeField] FluidBoundary3D  boundaryVolume;
+    [SerializeField] FluidBoundary3D boundaryVolume;
     [SerializeField] ParticleSettings settings;
-    [SerializeField] ComputeShader    fluidComputeShader;
-    [SerializeField] Material         particleMaterial;
+    [SerializeField] ComputeShader fluidComputeShader;
+    [SerializeField] Material particleMaterial;
 
-    SpawnSystem3D       _spawnSystem;
-    PhysicsSystem3D     _physicsSystem;
-    RenderSystem3D      _renderSystem;
+    SpawnSystem3D _spawnSystem;
+    PhysicsSystem3D _physicsSystem;
+    RenderSystem3D _renderSystem;
     bool _initialized;
 
-    // ── Settings cache (used to detect what actually changed) ────────────────
-    int     _lastParticleCount;
-    int     _lastSphereResolution;
-    float   _lastRadius;
-    float   _lastSmoothingRadius;
-    float   _lastParticleSpacing;
-    float   _lastVelocityDisplayMax;
+    int _lastParticleCount;
+    int _lastSphereResolution;
+    float _lastRadius;
+    float _lastSmoothingRadius;
+    float _lastParticleSpacing;
+    float _lastVelocityDisplayMax;
 
-
-    // ── Unity messages ───────────────────────────────────────────────────────
+    float _lastMass;
+    float _lastGravity;
+    float _lastPressureMultiplier;
+    float _lastTargetDensity;
+    float _lastCollisionDamping;
+    float _lastInteractionRadius;
+    float _lastViscosityCoeff;
+    float _lastSurfaceTensionCoeff;
+    float _lastSurfaceTensionThreshold;
 
     void Awake()
     {
@@ -33,11 +39,28 @@ public class FluidManager3D : MonoBehaviour
 
     void Start()
     {
+        Debug.Log("FluidManager3D Start called.");
+        float deltaTime = 1 / 60f;
+        Time.fixedDeltaTime = deltaTime;
         if (settings != null)
             settings.OnChanged += OnSettingsChanged;
 
         InitializeSystems();
     }
+
+    void OnEnable()
+    {
+        // 1. Hook up the event listener
+        if (settings != null)
+        {
+            settings.OnChanged -= OnSettingsChanged; // Avoid double-subscribing
+            settings.OnChanged += OnSettingsChanged;
+        }
+
+        // 2. Force full setup on enable so Edit Mode works immediately
+        InitializeSystems();
+    }
+
 
     void OnValidate()
     {
@@ -49,62 +72,57 @@ public class FluidManager3D : MonoBehaviour
         InitializeSystems();
     }
 
-    void Update()
+    void FixedUpdate()
     {
         if (!Application.isPlaying || !_initialized || boundaryVolume == null) return;
 
-        _physicsSystem.Simulate(
-            settings,
-            Time.deltaTime,
-            boundaryVolume.LocalMin,
-            boundaryVolume.LocalMax,
-            boundaryVolume.WorldToColliderLocalMatrix,
-            boundaryVolume.ColliderLocalToWorldMatrix);
+        // Interaction placeholder. In 3D you would normally raycast to find an interaction plane.
+        Vector3 interactionPos = Vector3.zero;
+        float currentStrength = 0f;
+
+        for (int i = 0; i < 3; i++)
+        {
+            _physicsSystem.Simulate(
+          settings,
+          Time.fixedDeltaTime / 3,
+          boundaryVolume.LocalMin,
+          boundaryVolume.LocalMax,
+          boundaryVolume.WorldToColliderLocalMatrix,
+          boundaryVolume.ColliderLocalToWorldMatrix,
+          interactionPos,
+          currentStrength);
+        }
+
     }
 
     void LateUpdate()
     {
-        if (!Application.isPlaying || !_initialized || boundaryVolume == null) return;
-
+        if (!_initialized || boundaryVolume == null) return;
         Bounds bounds = boundaryVolume.WorldBounds;
         _renderSystem.Render(_physicsSystem.ParticleBuffer, _physicsSystem.ParticleCount, bounds);
-
     }
 
     void OnDestroy()
     {
-        if (settings != null)
-            settings.OnChanged -= OnSettingsChanged;
-
+        if (settings != null) settings.OnChanged -= OnSettingsChanged;
         DisposeSystems();
     }
 
-    // ── Public accessors ─────────────────────────────────────────────────────
-
-    public Vector3 BoundsMin => boundaryVolume != null ? boundaryVolume.LocalMin  : Vector3.zero;
-    public Vector3 BoundsMax => boundaryVolume != null ? boundaryVolume.LocalMax  : Vector3.one;
-
-    // ── Initialization ───────────────────────────────────────────────────────
-
     void InitializeSystems()
     {
-        if (settings == null || fluidComputeShader == null) return;
-
-        if (boundaryVolume == null)
-            boundaryVolume = FindObjectOfType<FluidBoundary3D>();
-
-        if (boundaryVolume == null) return;
+        if (settings == null || fluidComputeShader == null || boundaryVolume == null) return;
 
         DisposeSystems();
 
-        _spawnSystem   = new SpawnSystem3D(settings);
+        _spawnSystem = new SpawnSystem3D(settings);
         _physicsSystem = new PhysicsSystem3D(fluidComputeShader);
 
         if (particleMaterial == null)
             particleMaterial = new Material(Shader.Find("Fluid/ParticleCircle3D"));
 
-        _renderSystem        = new RenderSystem3D(particleMaterial);
+        _renderSystem = new RenderSystem3D(particleMaterial);
         ParticleData3D[] particles = _spawnSystem.SpawnParticles(boundaryVolume);
+
         _physicsSystem.Initialize(settings, particles);
         _renderSystem.Initialize(settings);
 
@@ -115,29 +133,34 @@ public class FluidManager3D : MonoBehaviour
     void DisposeSystems()
     {
         _initialized = false;
-
         _physicsSystem?.Dispose();
         _physicsSystem = null;
-
         _renderSystem?.Dispose();
         _renderSystem = null;
-
-
         _spawnSystem = null;
     }
 
-    // ── Settings change handling ─────────────────────────────────────────────
-
     void OnSettingsChanged()
     {
-        if (settings == null || !Application.isPlaying) return;
+        if (settings == null || !_initialized) return;
 
         bool requiresReinitialize =
-            _lastParticleCount     != settings.particleCount     ||
-            _lastRadius            != settings.radius            ||
-            _lastSmoothingRadius   != settings.smoothingRadius   ||
-            _lastParticleSpacing   != settings.particleSpacing   ||
-            _lastSphereResolution  != settings.sphereResolution;
+            _lastParticleCount != settings.particleCount ||
+            _lastRadius != settings.radius ||
+            _lastSmoothingRadius != settings.smoothingRadius ||
+            _lastParticleSpacing != settings.particleSpacing ||
+            _lastSphereResolution != settings.sphereResolution;
+
+        bool physicsChange =
+            _lastMass != settings.mass ||
+            _lastGravity != settings.gravity ||
+            _lastPressureMultiplier != settings.pressureMultiplier ||
+            _lastTargetDensity != settings.targetDensity ||
+            _lastCollisionDamping != settings.collisionDamping ||
+            _lastInteractionRadius != settings.interactionRadius ||
+            _lastViscosityCoeff != settings.viscosityCoeff ||
+            _lastSurfaceTensionCoeff != settings.surfaceTensionCoeff ||
+            _lastSurfaceTensionThreshold != settings.surfaceTensionThreshold;
 
         if (requiresReinitialize)
         {
@@ -145,21 +168,34 @@ public class FluidManager3D : MonoBehaviour
             return;
         }
 
-        // Only gradient / velocity visuals changed — cheaper sync
+        if (physicsChange)
+        {
+            _physicsSystem.BindStaticUniforms(settings);
+        }
+
         if (_lastVelocityDisplayMax != settings.velocityDisplayMax)
             _renderSystem.SyncMaterial(settings);
-
 
         CacheSettings();
     }
 
     void CacheSettings()
     {
-        _lastParticleCount    = settings.particleCount;
+        _lastParticleCount = settings.particleCount;
         _lastSphereResolution = settings.sphereResolution;
-        _lastRadius           = settings.radius;
-        _lastSmoothingRadius  = settings.smoothingRadius;
-        _lastParticleSpacing  = settings.particleSpacing;
+        _lastRadius = settings.radius;
+        _lastSmoothingRadius = settings.smoothingRadius;
+        _lastParticleSpacing = settings.particleSpacing;
         _lastVelocityDisplayMax = settings.velocityDisplayMax;
+
+        _lastMass = settings.mass;
+        _lastGravity = settings.gravity;
+        _lastPressureMultiplier = settings.pressureMultiplier;
+        _lastTargetDensity = settings.targetDensity;
+        _lastCollisionDamping = settings.collisionDamping;
+        _lastInteractionRadius = settings.interactionRadius;
+        _lastViscosityCoeff = settings.viscosityCoeff;
+        _lastSurfaceTensionCoeff = settings.surfaceTensionCoeff;
+        _lastSurfaceTensionThreshold = settings.surfaceTensionThreshold;
     }
 }

@@ -15,7 +15,7 @@ namespace Rendering {
             Vector3[] positions = new Vector3[n];
 
             int particlesPerSide = Mathf.Max(1, Mathf.CeilToInt(Mathf.Pow(n, 1f / 3f)));
-            float spacing = _settings.smoothingRadius * 2 + _settings.particleSpacing; // <-- fix
+            float spacing = _settings.radius * 2 + _settings.particleSpacing; // <-- fix
 
             for (int i = 0; i < n; i++) {
                 int xIndex = i % particlesPerSide;

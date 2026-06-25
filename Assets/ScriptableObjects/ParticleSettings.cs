@@ -62,8 +62,21 @@ public class ParticleSettings : ScriptableObject
     [Range(0f, 100f)]
     public float targetDensity = 2.0f;
 
-    // ── Legacy─────────
-    // (segments was used by the 2d circle mesh)
+    [Header("Viscosity")]
+    // μ — dynamic viscosity. Higher values make the fluid thicker (more honey-like).
+    // Start around 0.1–0.5 for water-like behaviour; raise to 2–10 for syrup.
+    [Range(0f, 1000f)]
+    public float viscosityCoeff = 0.1f;
+
+    [Header("Surface Tension")]
+    // σ — surface tension coefficient. Controls how strongly the surface minimises
+    // its curvature. Start small (0.01–0.1) to avoid numerical blow-up.
+    [Range(0f, 100)]
+    public float surfaceTensionCoeff = 0.07f;
+    // l — surface-normal threshold (Eq. 23). Force is only applied where |∇cₛ| > l,
+    // i.e., near an actual surface. Raise this if interior particles fire the kernel.
+    [Range(0f, 2f)]
+    public float surfaceTensionThreshold = 0.1f;
 
 
     public System.Action OnChanged;

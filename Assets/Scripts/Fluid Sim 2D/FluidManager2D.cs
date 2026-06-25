@@ -34,6 +34,10 @@ public class FluidManager2D : MonoBehaviour
     float _lastCollisionDamping;
     float _lastInteractionRadius;
 
+    float _lastViscosityCoeff;
+    float _lastSurfaceTensionCoeff;
+    float _lastSurfaceTensionThreshold;
+
     void Awake()
     {
         Debug.Log("FluidManager2D Awake called.");
@@ -282,7 +286,10 @@ public class FluidManager2D : MonoBehaviour
             _lastTargetDensity != settings.targetDensity ||
             _lastCollisionDamping != settings.collisionDamping ||
             _lastGravity != settings.gravity ||
-            _lastInteractionRadius != settings.interactionRadius;
+            _lastInteractionRadius != settings.interactionRadius||
+            _lastViscosityCoeff != settings.viscosityCoeff ||
+            _lastSurfaceTensionCoeff != settings.surfaceTensionCoeff ||
+            _lastSurfaceTensionThreshold != settings.surfaceTensionThreshold;
 
         Debug.Log($"Settings changed. Reinitialize: {requiresReinitialize}, Physics change: {physicsChange}");
 
@@ -329,6 +336,9 @@ public class FluidManager2D : MonoBehaviour
         _lastSmoothness = settings.smoothness;
         _lastShowDensity = settings.showDensity;
         _lastInteractionRadius = settings.interactionRadius;
+        _lastViscosityCoeff = settings.viscosityCoeff;
+        _lastSurfaceTensionCoeff = settings.surfaceTensionCoeff;
+        _lastSurfaceTensionThreshold = settings.surfaceTensionThreshold;
     }
 
     Bounds BuildRenderBounds()

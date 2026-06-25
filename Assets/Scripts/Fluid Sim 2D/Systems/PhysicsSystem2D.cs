@@ -31,6 +31,10 @@ public sealed class PhysicsSystem2D : IDisposable
     static readonly int InteractionRadiusId = Shader.PropertyToID("_InteractionRadius");
     static readonly int InteractionStrengthId = Shader.PropertyToID("_InteractionStrength");
 
+    static readonly int ViscosityCoeffId = Shader.PropertyToID("_ViscosityCoeff");
+    static readonly int SurfaceTensionCoeffId = Shader.PropertyToID("_SurfaceTensionCoeff");
+    static readonly int SurfaceTensionThresholdId = Shader.PropertyToID("_SurfaceTensionThreshold");
+
     // ── Kernel handles ───────────────────────────────────────────────────────
     readonly ComputeShader _compute;
 
@@ -41,6 +45,8 @@ public sealed class PhysicsSystem2D : IDisposable
     readonly int _buildStartIndicesKernel;
     readonly int _updateDensitiesKernel;
     readonly int _calcPressureKernel;
+    readonly int _calcViscosityKernel;
+    readonly int _calcSurfaceTensionKernel;
     readonly int _integrateKernel;
 
     // ── GPU buffers ──────────────────────────────────────────────────────────
@@ -66,6 +72,8 @@ public sealed class PhysicsSystem2D : IDisposable
         _buildStartIndicesKernel = _compute.FindKernel("BuildStartIndices");
         _updateDensitiesKernel = _compute.FindKernel("UpdateDensities");
         _calcPressureKernel = _compute.FindKernel("CalculatePressureForces");
+        _calcViscosityKernel = _compute.FindKernel("CalculateViscosityForces");
+        _calcSurfaceTensionKernel = _compute.FindKernel("CalculateSurfaceTension");
         _integrateKernel = _compute.FindKernel("Integrate");
     }
 
@@ -114,40 +122,11 @@ public sealed class PhysicsSystem2D : IDisposable
         _compute.Dispatch(_buildStartIndicesKernel, paddedGroups, 1, 1);
         _compute.Dispatch(_updateDensitiesKernel, realGroups, 1, 1);
         _compute.Dispatch(_calcPressureKernel, realGroups, 1, 1);
+        _compute.Dispatch(_calcViscosityKernel, realGroups, 1, 1);
+        _compute.Dispatch(_calcSurfaceTensionKernel, realGroups, 1, 1);
         _compute.Dispatch(_integrateKernel, realGroups, 1, 1);
     }
 
-    // ── Per-frame simulation ─────────────────────────────────────────────────
-    public void Simulate(ParticleSettings settings, float deltaTime, Vector2 boundsMin, Vector2 boundsMax)
-    {
-        if (_particlesBuffer == null || ParticleCount == 0) return;
-
-        // Only update uniforms that change per frame
-        _compute.SetFloat(DeltaTimeId, deltaTime);
-        _compute.SetVector(BoundsMinId, boundsMin);
-        _compute.SetVector(BoundsMaxId, boundsMax);
-
-        int realGroups = Mathf.CeilToInt(ParticleCount / (float)ThreadsPerGroup);
-        int paddedGroups = Mathf.CeilToInt(_paddedCount / (float)ThreadsPerGroup);
-
-        // 0. Predict positions on GPU:
-        _compute.Dispatch(_predictPositionsKernel, realGroups, 1, 1);
-
-        // 1. Build spatial lookup completely on GPU
-        _compute.Dispatch(_buildSpatialLookupKernel, paddedGroups, 1, 1);
-
-        // 2. GPU bitonic sort
-        DispatchBitonicSort(paddedGroups);
-
-        // 3. Clear and build start indices completely on GPU
-        _compute.Dispatch(_clearStartIndicesKernel, paddedGroups, 1, 1);
-        _compute.Dispatch(_buildStartIndicesKernel, paddedGroups, 1, 1);
-
-        // 4. Physics kernels
-        _compute.Dispatch(_updateDensitiesKernel, realGroups, 1, 1);
-        _compute.Dispatch(_calcPressureKernel, realGroups, 1, 1);
-        _compute.Dispatch(_integrateKernel, realGroups, 1, 1);
-    }
 
     // ── IDisposable ──────────────────────────────────────────────────────────
     public void Dispose() => DisposeBuffers();
@@ -165,6 +144,9 @@ public sealed class PhysicsSystem2D : IDisposable
         _compute.SetFloat(ParticleRadiusId, settings.radius);
         _compute.SetFloat(CollisionDampingId, settings.collisionDamping);
         _compute.SetFloat(InteractionRadiusId, settings.interactionRadius);
+        _compute.SetFloat(ViscosityCoeffId, settings.viscosityCoeff);
+        _compute.SetFloat(SurfaceTensionCoeffId, settings.surfaceTensionCoeff);
+        _compute.SetFloat(SurfaceTensionThresholdId, settings.surfaceTensionThreshold);
 
     }
 
@@ -174,7 +156,9 @@ public sealed class PhysicsSystem2D : IDisposable
             _predictPositionsKernel,
             _buildSpatialLookupKernel, _clearStartIndicesKernel,
             _bitonicSortKernel, _buildStartIndicesKernel,
-            _updateDensitiesKernel, _calcPressureKernel, _integrateKernel
+            _updateDensitiesKernel, _calcPressureKernel,
+            _calcViscosityKernel, _calcSurfaceTensionKernel,
+            _integrateKernel
         };
 
         foreach (int k in kernels)

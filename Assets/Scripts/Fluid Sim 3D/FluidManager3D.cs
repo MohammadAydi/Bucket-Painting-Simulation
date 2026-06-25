@@ -12,6 +12,8 @@ public class FluidManager3D : MonoBehaviour
     SpawnSystem3D       _spawnSystem;
     PhysicsSystem3D     _physicsSystem;
     RenderSystem3D      _renderSystem;
+    public ComputeBuffer ParticleBuffer => _physicsSystem?.ParticleBuffer;
+    public int           ParticleCount  => _physicsSystem?.ParticleCount ?? 0;
     bool _initialized;
 
     // ── Settings cache (used to detect what actually changed) ────────────────
@@ -62,14 +64,6 @@ public class FluidManager3D : MonoBehaviour
             boundaryVolume.ColliderLocalToWorldMatrix);
     }
 
-    void LateUpdate()
-    {
-        if (!Application.isPlaying || !_initialized || boundaryVolume == null) return;
-
-        Bounds bounds = boundaryVolume.WorldBounds;
-        _renderSystem.Render(_physicsSystem.ParticleBuffer, _physicsSystem.ParticleCount, bounds);
-
-    }
 
     void OnDestroy()
     {

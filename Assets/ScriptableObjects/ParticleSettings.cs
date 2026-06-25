@@ -5,7 +5,7 @@ public class ParticleSettings : ScriptableObject
 {
     [Header("Count & Shape")]
     [Range(1, 10000)]
-    public int particleCount = 100;
+    public int particleCount = 1000;
     [Range(0.01f, 1f)]
     public float radius = 0.1f;
     [Range(3, 32)]

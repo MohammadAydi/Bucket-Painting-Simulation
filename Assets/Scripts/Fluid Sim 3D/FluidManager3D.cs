@@ -31,6 +31,9 @@ public class FluidManager3D : MonoBehaviour
     float _lastSurfaceTensionCoeff;
     float _lastSurfaceTensionThreshold;
 
+    public ComputeBuffer ParticleBuffer => _physicsSystem?.ParticleBuffer;
+    public int           ParticleCount  => _physicsSystem?.ParticleCount ?? 0;
+
     void Awake()
     {
         if (boundaryVolume == null)

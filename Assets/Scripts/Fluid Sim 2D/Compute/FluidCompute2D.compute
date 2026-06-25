@@ -116,6 +116,8 @@ void PredictPositions(uint3 id : SV_DispatchThreadID)
 {
     if ((int)id.x >= _ParticleCount) return;
     ParticleData p = _Particles[id.x];
+
+    float2 gravityAccel = float2(0.0, _Gravity);
     
     if (_InteractionStrength != 0.0)
     {
@@ -125,18 +127,19 @@ void PredictPositions(uint3 id : SV_DispatchThreadID)
         if (sqrDst < _InteractionRadius * _InteractionRadius)
         {
             float dst = sqrt(sqrDst);
-            float2 dirToInputPoint = (dst <= 0.00001) ? float2(0.0, 0.0) : offset / dst;
-            float centreT = 1.0 - (dst / _InteractionRadius);
+            float edgeT = (dst / _InteractionRadius);
+            float centreT = 1.0 - edgeT;
+            float2 dirToInputPoint = offset / dst;
             
-            float2 interactionForce = (dirToInputPoint * _InteractionStrength - p.velocity) * centreT;
-            
-            // NEW: Multiply by sharpness to force near-instant velocity convergence
-            p.velocity += interactionForce * _DeltaTime * 10;
+            float gravityWeight = 1 - (centreT * saturate(_InteractionStrength / 10));
+            gravityAccel = gravityAccel * gravityWeight + dirToInputPoint * centreT * _InteractionStrength;
+            gravityAccel -= p.velocity * centreT;
         }
     }
-    p.velocity += float2(0.0, _Gravity) * _DeltaTime;
+    p.velocity += gravityAccel * _DeltaTime;
 
-    p.predictedPosition = p.position + p.velocity * _DeltaTime;
+    const float predictionFactor = 1 / 120.0;
+    p.predictedPosition = p.position + p.velocity * predictionFactor;
     _Particles[id.x] = p;
 }
 

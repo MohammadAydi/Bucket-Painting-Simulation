@@ -24,6 +24,7 @@ Shader "Fluid/ParticleCircle3D"
             struct ParticleData
             {
                 float4 position;
+                float4 predictedPosition;
                 float4 velocity;
                 float4 force;
                 float  density;

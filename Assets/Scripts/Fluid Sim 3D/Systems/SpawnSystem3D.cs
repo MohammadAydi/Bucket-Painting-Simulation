@@ -12,7 +12,7 @@ public sealed class SpawnSystem3D
 
     public ParticleData3D[] SpawnParticles(FluidBoundary3D boundary)
     {
-        Vector3[] localPositions = _particlesSpawner.RandomSpawnParticles(boundary.LocalMin, boundary.LocalMax);
+        Vector3[] localPositions = _particlesSpawner.SpawnGridParticles();
         ParticleData3D[] particles = new ParticleData3D[localPositions.Length];
         Matrix4x4 localToWorld = boundary.ColliderLocalToWorldMatrix;
 

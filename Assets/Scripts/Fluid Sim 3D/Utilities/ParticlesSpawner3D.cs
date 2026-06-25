@@ -8,6 +8,34 @@ namespace Rendering {
         public ParticlesSpawner3D(ParticleSettings settings) {
             this._settings = settings;
         }
+        
+        public Vector3[] SpawnGridParticlesRandom() {
+            int n = _settings.particleCount;
+            Vector3[] positions = new Vector3[n];
+
+            int particlesPerSide = Mathf.Max(1, Mathf.CeilToInt(Mathf.Pow(n, 1f / 3f)));
+            float spacing = _settings.radius * 2 + _settings.particleSpacing;
+
+            float maxJitter = _settings.particleSpacing * 0.5f; 
+
+            for (int i = 0; i < n; i++) {
+                int xIndex = i % particlesPerSide;
+                int yIndex = (i / particlesPerSide) % particlesPerSide;
+                int zIndex = i / (particlesPerSide * particlesPerSide);
+
+                float x = (xIndex - particlesPerSide / 2f + 0.5f) * spacing;
+                float y = (yIndex - particlesPerSide / 2f + 0.5f) * spacing;
+                float z = (zIndex - particlesPerSide / 2f + 0.5f) * spacing;
+
+                float jitterX = UnityEngine.Random.Range(-maxJitter, maxJitter);
+                float jitterY = UnityEngine.Random.Range(-maxJitter, maxJitter);
+                float jitterZ = UnityEngine.Random.Range(-maxJitter, maxJitter);
+
+                positions[i] = new Vector3(x + jitterX, y + jitterY, z + jitterZ);
+            }
+
+            return positions;
+        }
 
 
         public Vector3[] SpawnGridParticles() {

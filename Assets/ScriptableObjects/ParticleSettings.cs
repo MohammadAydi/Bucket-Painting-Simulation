@@ -4,7 +4,7 @@ using UnityEngine;
 public class ParticleSettings : ScriptableObject
 {
     [Header("Count & Shape")]
-    [Range(1, 10000)]
+    [Range(1, 1000000)]
     public int particleCount = 1000;
     [Range(0.01f, 1f)]
     public float radius = 0.1f;

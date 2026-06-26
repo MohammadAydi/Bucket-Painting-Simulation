@@ -3,7 +3,7 @@ Shader "Fluid/ParticleCircle3D"
     Properties
     {
         _ParticleRadius ("Particle Radius", Float) = 0.1
-        _VelocityMax    ("Velocity Max",    Float) = 5.0
+        _VelocityMax ("Velocity Max", Float) = 5.0
     }
 
     SubShader
@@ -27,14 +27,14 @@ Shader "Fluid/ParticleCircle3D"
                 float4 predictedPosition;
                 float4 velocity;
                 float4 force;
-                float  density;
-                float  pressure;
+                float density;
+                float pressure;
             };
 
             StructuredBuffer<ParticleData> _Particles;
 
-            Texture2D<float4>  _ColourMap;
-            SamplerState       linear_clamp_sampler;
+            Texture2D<float4> _ColourMap;
+            SamplerState linear_clamp_sampler;
 
             float _ParticleRadius;
             float _VelocityMax;
@@ -42,9 +42,9 @@ Shader "Fluid/ParticleCircle3D"
             // ── V2F ──────────────────────────────────────────────────────────
             struct v2f
             {
-                float4 pos    : SV_POSITION;
-                float3 color  : TEXCOORD0;
-                float3 normal : TEXCOORD1;  // world-space normal for diffuse shading
+                float4 pos : SV_POSITION;
+                float3 color : TEXCOORD0;
+                float3 normal : TEXCOORD1; // world-space normal for diffuse shading
             };
 
             // ── Vertex shader ─────────────────────────────────────────────────
@@ -54,19 +54,18 @@ Shader "Fluid/ParticleCircle3D"
             {
                 ParticleData p = _Particles[instanceID];
 
-                // Place scaled sphere vertex in world space
-                float3 worldPos = p.position.xyz + mul(unity_ObjectToWorld, v.vertex * _ParticleRadius).xyz;
-                float3 objPos   = mul(unity_WorldToObject, float4(worldPos, 1)).xyz;
+                float3 localPos = v.vertex.xyz * _ParticleRadius;
 
-                // Velocity → colour via gradient texture
-                float speed  = length(p.velocity.xyz);
-                float speedT = saturate(speed / max(_VelocityMax, 0.0001));
-                float3 col   = _ColourMap.SampleLevel(linear_clamp_sampler, float2(speedT, 0.5), 0).rgb;
+                float3 worldPos = p.position.xyz + localPos;
 
                 v2f o;
-                o.pos    = UnityObjectToClipPos(objPos);
-                o.color  = col;
+                o.pos = mul(UNITY_MATRIX_VP, float4(worldPos, 1.0));
+
+                float speed = length(p.velocity.xyz);
+                float speedT = saturate(speed / max(_VelocityMax, 0.0001));
+                o.color = _ColourMap.SampleLevel(linear_clamp_sampler, float2(speedT, 0.5), 0).rgb;
                 o.normal = UnityObjectToWorldNormal(v.normal);
+
                 return o;
             }
 

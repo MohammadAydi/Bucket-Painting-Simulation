@@ -7,6 +7,7 @@ public class FluidManager3D : MonoBehaviour
     [SerializeField] FluidBoundary3D boundaryVolume;
     [SerializeField] ParticleSettings settings;
     [SerializeField] ComputeShader fluidComputeShader;
+    [SerializeField] ComputeShader oneSweepShader;
     [SerializeField] Material particleMaterial;
 
     SpawnSystem3D _spawnSystem;
@@ -113,12 +114,12 @@ public class FluidManager3D : MonoBehaviour
 
     void InitializeSystems()
     {
-        if (settings == null || fluidComputeShader == null || boundaryVolume == null) return;
+        if (settings == null || fluidComputeShader == null || oneSweepShader == null     || boundaryVolume == null) return;
 
         DisposeSystems();
 
         _spawnSystem = new SpawnSystem3D(settings);
-        _physicsSystem = new PhysicsSystem3D(fluidComputeShader);
+        _physicsSystem = new PhysicsSystem3D(fluidComputeShader, oneSweepShader);
 
         if (particleMaterial == null)
             particleMaterial = new Material(Shader.Find("Fluid/ParticleCircle3D"));

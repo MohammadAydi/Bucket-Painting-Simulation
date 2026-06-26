@@ -151,7 +151,7 @@ MonoBehaviour:
   boundaryVolume: {fileID: 1562304914}
   settings: {fileID: 11400000, guid: e935e18c03d419345ab1e0a4542d807e, type: 2}
   fluidComputeShader: {fileID: 7200000, guid: 7433be18ba63a634abc5123f294dbfe7, type: 3}
-  oneSweepShader: {fileID: 7200000, guid: 7461e55737894fc4db68b4f3291b312d, type: 3}
+  oneSweepShader: {fileID: 0}
   particleMaterial: {fileID: 2100000, guid: 844544271cbfcc8428cda7c6a1428bd6, type: 2}
 --- !u!4 &262373073
 Transform:
@@ -162,7 +162,7 @@ Transform:
   m_GameObject: {fileID: 262373071}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: -0.77436, y: 0.48932, z: 8.79821}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -255,7 +255,7 @@ Transform:
   m_GameObject: {fileID: 691383802}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -16.35}
+  m_LocalPosition: {x: 0, y: 1, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -553,8 +553,8 @@ Transform:
   m_GameObject: {fileID: 1562304913}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 22.904432, y: 13.08854, z: 82.91999}
+  m_LocalPosition: {x: 0, y: -0, z: 0}
+  m_LocalScale: {x: 22.90443, y: 13.08854, z: 82.91999}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}

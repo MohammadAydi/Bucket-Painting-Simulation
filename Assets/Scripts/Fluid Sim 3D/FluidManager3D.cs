@@ -1,6 +1,6 @@
 using UnityEngine;
 
-[ExecuteAlways]
+// [ExecuteAlways]
 public class FluidManager3D : MonoBehaviour
 {
     [Header("References")]
@@ -33,7 +33,7 @@ public class FluidManager3D : MonoBehaviour
     float _lastSurfaceTensionThreshold;
 
     public ComputeBuffer ParticleBuffer => _physicsSystem?.ParticleBuffer;
-    public int           ParticleCount  => _physicsSystem?.ParticleCount ?? 0;
+    public int ParticleCount => _physicsSystem?.ParticleCount ?? 0;
 
     void Awake()
     {
@@ -103,7 +103,7 @@ public class FluidManager3D : MonoBehaviour
     {
         if (!_initialized || boundaryVolume == null) return;
         Bounds bounds = boundaryVolume.WorldBounds;
-        _renderSystem.Render(_physicsSystem.ParticleBuffer, _physicsSystem.ParticleCount, bounds);
+        _renderSystem.Render(_physicsSystem.ParticleCount, bounds);
     }
 
     void OnDestroy()
@@ -114,7 +114,7 @@ public class FluidManager3D : MonoBehaviour
 
     void InitializeSystems()
     {
-        if (settings == null || fluidComputeShader == null || oneSweepShader == null     || boundaryVolume == null) return;
+        if (settings == null || fluidComputeShader == null || oneSweepShader == null || boundaryVolume == null) return;
 
         DisposeSystems();
 
@@ -128,7 +128,7 @@ public class FluidManager3D : MonoBehaviour
         ParticleData3D[] particles = _spawnSystem.SpawnParticles(boundaryVolume);
 
         _physicsSystem.Initialize(settings, particles);
-        _renderSystem.Initialize(settings);
+        _renderSystem.Initialize(settings, _physicsSystem.ParticleBuffer);
 
         CacheSettings();
         _initialized = true;

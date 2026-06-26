@@ -8,19 +8,19 @@ Shader "Fluid/ParticleCircle3D"
 
     SubShader
     {
-        Tags { "Queue" = "Geometry" "RenderType" = "Opaque" }
+        Tags { "Queue" = "AlphaTest" "RenderType" = "TransparentCutout" }
         ZWrite On
-        Cull Back
+        Cull Off
 
         Pass
         {
             CGPROGRAM
-            #pragma target   4.5
-            #pragma vertex   vert
+            #pragma target 4.5
+            #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
 
-            // ── Particle data layout must match ParticleData3D struct ──────────
+            // ── Particle data layout ─────────────────────────────────────────
             struct ParticleData
             {
                 float4 position;
@@ -32,51 +32,70 @@ Shader "Fluid/ParticleCircle3D"
             };
 
             StructuredBuffer<ParticleData> _Particles;
-
             Texture2D<float4> _ColourMap;
             SamplerState linear_clamp_sampler;
 
             float _ParticleRadius;
             float _VelocityMax;
 
-            // ── V2F ──────────────────────────────────────────────────────────
+            // ── Structs ──────────────────────────────────────────────────────
+            struct appdata
+            {
+                float4 vertex : POSITION;
+            };
+
             struct v2f
             {
                 float4 pos : SV_POSITION;
                 float3 color : TEXCOORD0;
-                float3 normal : TEXCOORD1; // world-space normal for diffuse shading
+                float2 uv : TEXCOORD1;
             };
 
             // ── Vertex shader ─────────────────────────────────────────────────
-            // Each instance is one particle. The mesh is a unit sphere, so we
-            // scale every vertex by _ParticleRadius and offset it to world space.
-            v2f vert(appdata_full v, uint instanceID : SV_InstanceID)
+            v2f vert(appdata v, uint instanceID : SV_InstanceID)
             {
                 ParticleData p = _Particles[instanceID];
 
-                float3 localPos = v.vertex.xyz * _ParticleRadius;
+                // Our C# mesh vertices go from -1 to 1, exactly what we need
+                float2 quadOffset = v.vertex.xy;
 
-                float3 worldPos = p.position.xyz + localPos;
+                // Transform particle center to view space
+                float4 viewPos = mul(UNITY_MATRIX_V, float4(p.position.xyz, 1.0));
+                
+                // Add the billboard offset in view space
+                viewPos.xy += quadOffset * _ParticleRadius;
 
                 v2f o;
-                o.pos = mul(UNITY_MATRIX_VP, float4(worldPos, 1.0));
+                o.pos = mul(UNITY_MATRIX_P, viewPos);
 
+                // Velocity colouring
                 float speed = length(p.velocity.xyz);
                 float speedT = saturate(speed / max(_VelocityMax, 0.0001));
                 o.color = _ColourMap.SampleLevel(linear_clamp_sampler, float2(speedT, 0.5), 0).rgb;
-                o.normal = UnityObjectToWorldNormal(v.normal);
-
+                
+                o.uv = quadOffset; 
                 return o;
             }
 
             // ── Fragment shader ───────────────────────────────────────────────
             fixed4 frag(v2f i) : SV_Target
             {
-                // Simple diffuse: dot(normal, light direction)
-                // The +0.6/1.4 lift prevents the shadow side going pitch black,
-                // giving the same soft ambient look as the instructor's shader.
-                float shading = saturate(dot(_WorldSpaceLightPos0.xyz, normalize(i.normal)));
+                // Circular alpha mask
+                float distSq = dot(i.uv, i.uv);
+                if (distSq > 1.0) 
+                    discard; 
+
+                // Calculate fake Z to reconstruct a spherical normal
+                float z = sqrt(1.0 - distSq);
+                
+                // Construct the normal in view space, then convert to world space
+                float3 viewNormal = float3(i.uv.x, i.uv.y, z);
+                float3 worldNormal = mul((float3x3)UNITY_MATRIX_I_V, viewNormal);
+
+                // Diffuse shading
+                float shading = saturate(dot(_WorldSpaceLightPos0.xyz, normalize(worldNormal)));
                 shading = (shading + 0.6) / 1.4;
+                
                 return fixed4(i.color * shading, 1.0);
             }
 

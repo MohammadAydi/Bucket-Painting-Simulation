@@ -12,16 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 28fa03c07c6944b19237a75ee25d8289, type: 3}
   m_Name: GravitySettings
   m_EditorClassIdentifier: Assembly-CSharp::ParticleSettings
-  particleCount: 111
+  particleCount: 500
   radius: 0.069
   segments: 9
-  color: {r: 0.2, g: 0.6, b: 1, a: 0.85}
+  particleColor: {r: 0, g: 0, b: 0, a: 1}
   useVertexColor: 0
   particleSpacing: 0.86
   showDensity: 0
   smoothness: 1
   smoothingRadius: 1
-  densityColor: {r: 0.2, g: 0.5, b: 1, a: 0.15}
+  lowDensityColor: {r: 0.1266, g: 0.533, b: 0.6886, a: 1}
+  TargetDensityColor: {r: 1, g: 1, b: 1, a: 1}
+  highDensityColor: {r: 0.8301, g: 0.2914, b: 0.2075, a: 1}
   mass: 1
   collisionDamping: 0.8
   pressureMultiplier: 2

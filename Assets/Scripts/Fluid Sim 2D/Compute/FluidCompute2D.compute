@@ -1,0 +1,546 @@
+#pragma kernel PredictPositions
+#pragma kernel BuildSpatialLookup
+#pragma kernel ClearStartIndices
+#pragma kernel BitonicSort
+#pragma kernel BuildStartIndices
+#pragma kernel UpdateDensities
+#pragma kernel CalculatePressureForces
+#pragma kernel CalculateViscosityForces
+#pragma kernel CalculateSurfaceTension
+#pragma kernel Integrate
+
+#include "UnityCG.cginc"
+
+// ─────────────────────────────────────────────────────────────
+//  Shared constants
+// ─────────────────────────────────────────────────────────────
+static const int NumThreads = 64;
+static const uint UINT_MAX = 0xFFFFFFFF;
+
+// ─────────────────────────────────────────────────────────────
+//  Structs
+// ─────────────────────────────────────────────────────────────
+struct ParticleData
+{
+    float2 position;
+    float2 predictedPosition;
+    float2 velocity;
+    float2 force;
+    float density;
+    float pressure;
+};
+
+struct SpatialEntry
+{
+    uint particleIndex;
+    uint cellKey;
+};
+
+// ─────────────────────────────────────────────────────────────
+//  Buffers
+// ─────────────────────────────────────────────────────────────
+RWStructuredBuffer<ParticleData> _Particles;
+RWStructuredBuffer<SpatialEntry> _SpatialLookup;
+RWStructuredBuffer<uint> _StartIndices;
+
+// ─────────────────────────────────────────────────────────────
+//  Uniforms
+// ─────────────────────────────────────────────────────────────
+int _ParticleCount;
+int _PaddedCount;
+int _K;
+int _J;
+
+float _DeltaTime;
+float _Mass;
+float _Gravity;
+float _SmoothingRadius;
+float _PressureMultiplier;
+float _TargetDensity;
+float _ParticleRadius;
+float _CollisionDamping;
+float2 _BoundsMin;
+float2 _BoundsMax;
+
+float2 _InteractionInputPos;
+float _InteractionRadius;
+float _InteractionStrength; // Positive = Pull, Negative = Push
+
+float _ViscosityCoeff; // μ — dynamic viscosity
+float _SurfaceTensionCoeff; // σ — surface tension coefficient
+float _SurfaceTensionThreshold; // l — only apply when | n | > threshold (Eq.23)
+
+
+// ─────────────────────────────────────────────────────────────
+//  Spatial hashing helpers
+// ─────────────────────────────────────────────────────────────
+int2 PositionToCellCoord(float2 pos, float radius)
+{
+    return int2(floor(pos / radius));
+}
+
+uint HashCell(int2 cell)
+{
+    uint a = (uint)cell.x * 15823u;
+    uint b = (uint)cell.y * 9737333u;
+    return a + b;
+}
+
+uint GetKey(uint hash)
+{
+    return hash % (uint)_PaddedCount;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Smoothing kernels
+// ─────────────────────────────────────────────────────────────
+float SmoothingKernel(float radius, float dst)
+{
+    if (dst >= radius) return 0.0;
+        float volume = UNITY_PI * pow(radius, 4.0) / 6.0;
+    float diff = radius - dst;
+    return (diff * diff) / volume;
+}
+
+float SmoothingKernelDerivative(float dst, float radius)
+{
+    if (dst >= radius) return 0.0;
+        float scale = 12.0 / (pow(radius, 4.0) * UNITY_PI);
+    return (dst - radius) * scale;
+}
+
+float DensityToPressure(float density)
+{
+    return (density - _TargetDensity) * _PressureMultiplier;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  PREDICT POSITIONS KERNEL
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void PredictPositions(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _ParticleCount) return;
+        ParticleData p = _Particles[id.x];
+
+    float2 gravityAccel = float2(0.0, _Gravity);
+
+    if (_InteractionStrength != 0.0)
+    {
+        float2 offset = _InteractionInputPos - p.position;
+        float sqrDst = dot(offset, offset);
+
+        if (sqrDst < _InteractionRadius * _InteractionRadius)
+        {
+            float dst = sqrt(sqrDst);
+            float edgeT = (dst / _InteractionRadius);
+            float centreT = 1.0 - edgeT;
+            float2 dirToInputPoint = offset / dst;
+
+            float gravityWeight = 1 - (centreT * saturate(_InteractionStrength / 10));
+            gravityAccel = gravityAccel * gravityWeight + dirToInputPoint * centreT * _InteractionStrength;
+            gravityAccel -= p.velocity * centreT;
+        }
+    }
+    p.velocity += gravityAccel * _DeltaTime;
+
+    const float predictionFactor = 1 / 120.0;
+    p.predictedPosition = p.position + p.velocity * predictionFactor;
+    _Particles[id.x]= p;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+//  NEW KERNEL: BuildSpatialLookup
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void BuildSpatialLookup(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)_PaddedCount) return;
+
+        if (i < (uint)_ParticleCount)
+    {
+        float2 pos = _Particles[i].predictedPosition;
+        int2 cell = PositionToCellCoord(pos, _SmoothingRadius);
+        uint key = GetKey(HashCell(cell));
+
+        _SpatialLookup[i].particleIndex = i;
+        _SpatialLookup[i].cellKey = key;
+    }
+    else
+    {
+        // Dummy entries for padded slots
+        _SpatialLookup[i].particleIndex = UINT_MAX;
+        _SpatialLookup[i].cellKey = UINT_MAX;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  NEW KERNEL: ClearStartIndices
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void ClearStartIndices(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)_PaddedCount) return;
+
+        _StartIndices[i]= UINT_MAX;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  KERNEL: BitonicSort
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void BitonicSort(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)_PaddedCount) return;
+
+        uint ixj = i ^ (uint)_J;
+    if (ixj <= i) return;
+
+        SpatialEntry a = _SpatialLookup[i];
+    SpatialEntry b = _SpatialLookup[ixj];
+
+    bool ascending = ((i & (uint)_K) == 0);
+
+    bool shouldSwap = ascending ? (a.cellKey > b.cellKey) : (a.cellKey < b.cellKey);
+    if (shouldSwap)
+    {
+        _SpatialLookup[i]= b;
+        _SpatialLookup[ixj]= a;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  KERNEL: BuildStartIndices
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void BuildStartIndices(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= (uint)_PaddedCount) return;
+
+        uint key = _SpatialLookup[i].cellKey;
+    uint keyPrev = (i == 0) ? UINT_MAX : _SpatialLookup[i - 1].cellKey;
+
+    if (key != keyPrev)
+    {
+        if (key < (uint)_PaddedCount)
+        {
+            _StartIndices[key]= i;
+        }
+    }
+}
+
+static const int2 CellOffsets[9]=
+{
+    int2( -1, -1), int2(0, -1), int2(1, -1),
+    int2( -1, 0), int2(0, 0), int2(1, 0),
+    int2( -1, 1), int2(0, 1), int2(1, 1)
+};
+
+// ─────────────────────────────────────────────────────────────
+//  KERNEL: UpdateDensities
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void UpdateDensities(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _ParticleCount) return;
+
+        float2 pos = _Particles[id.x].predictedPosition;
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    float density = 0.0;
+
+    int2 centreCell = PositionToCellCoord(pos, _SmoothingRadius);
+
+    [unroll]
+    for (int n = 0; n < 9; n++ )
+    {
+        int2 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell));
+        uint start = _StartIndices[key];
+
+        if (start == UINT_MAX) continue;
+
+            for (uint j = start; j < (uint)_PaddedCount; j++ )
+        {
+            SpatialEntry entry = _SpatialLookup[j];
+            if (entry.cellKey != key) break;
+                if (entry.particleIndex == UINT_MAX) continue;
+
+                float2 other = _Particles[entry.particleIndex].predictedPosition;
+            float2 delta = other - pos;
+            float sqrD = dot(delta, delta);
+
+            if (sqrD <= sqrH)
+            {
+                float dst = sqrt(sqrD);
+                density += _Mass * SmoothingKernel(_SmoothingRadius, dst);
+            }
+        }
+    }
+
+    _Particles[id.x].density = density;
+    _Particles[id.x].pressure = DensityToPressure(density);
+    _Particles[id.x].force = float2(0.0, 0.0);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Viscosity smoothing kernel (2D)
+//
+//  The paper (Eq. 22) gives the 3D viscosity kernel whose
+//  Laplacian is 45/(π h⁶)(h − r).
+//  In 2D the normalisation factor changes to keep ∫W dA = 1,
+//  which yields:  ∇²W_visc_2D(r, h) = 40 / (π h⁵) · (h − r)
+// ─────────────────────────────────────────────────────────────
+float ViscosityKernelLaplacian2D(float dst, float h)
+{
+    if (dst >= h) return 0.0;
+        return (40.0 / (UNITY_PI * pow(h, 5.0))) * (h - dst);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Wpoly6 kernel (2D) — used for the surface-tension colour field
+//
+//  3D form (Eq. 20):  315 / (64 π h⁹) · (h² − r²)³
+//  2D normalisation gives:  4 / (π h⁸) · (h² − r²)³
+// ─────────────────────────────────────────────────────────────
+float Poly6Kernel2D(float sqrDst, float sqrH, float h)
+{
+    if (sqrDst >= sqrH) return 0.0;
+        float diff = sqrH - sqrDst; // (h² − r²)
+    return (4.0 / (UNITY_PI * pow(h, 8.0))) * diff * diff * diff;
+}
+
+// Gradient of Wpoly6 in 2D:  ∇W = −24r / (π h⁸) · (h² − r²)²  · r̂
+// Returns the scalar factor; caller multiplies by the direction vector.
+float Poly6GradientScalar2D(float dst, float sqrDst, float sqrH, float h)
+{
+    if (sqrDst >= sqrH) return 0.0;
+        float diff = sqrH - sqrDst; // (h² − r²)
+    return ( -24.0 * dst / (UNITY_PI * pow(h, 8.0))) * diff * diff;
+}
+
+// Laplacian of Wpoly6 in 2D:
+//   ∇²W = −24 / (π h⁸) · (h² − r²) · [(h² − r²) − 4r²]
+float Poly6LaplacianScalar2D(float sqrDst, float sqrH, float h)
+{
+    if (sqrDst >= sqrH) return 0.0;
+    float diff = sqrH - sqrDst;           // (h² − r²)
+    return (-24.0 / (UNITY_PI * pow(h, 8.0))) * diff * (diff - 4.0 * sqrDst);
+}
+// ─────────────────────────────────────────────────────────────
+//  KERNEL: CalculateViscosityForces  (Eq. 14)
+//
+//  f_visc_i = μ Σ_j  mⱼ (vⱼ − vᵢ) / ρⱼ · ∇²W_visc(rᵢ − rⱼ, h)
+//
+//  The result is ACCUMULATED into particle.force so it must run
+//  AFTER CalculatePressureForces (which initialises force to the
+//  pressure contribution).
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void CalculateViscosityForces(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _ParticleCount) return;
+
+        ParticleData self = _Particles[id.x];
+    float2 viscForce = float2(0.0, 0.0);
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+
+    int2 centreCell = PositionToCellCoord(self.predictedPosition, _SmoothingRadius);
+
+    [unroll]
+    for (int n = 0; n < 9; n++ )
+    {
+        int2 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell));
+        uint start = _StartIndices[key];
+        if (start == UINT_MAX) continue;
+
+            for (uint j = start; j < (uint)_PaddedCount; j++ )
+        {
+            SpatialEntry entry = _SpatialLookup[j];
+            if (entry.cellKey != key) break;
+                if (entry.particleIndex == UINT_MAX) continue;
+
+                uint other_idx = entry.particleIndex;
+            if (other_idx == id.x) continue;
+
+                ParticleData other = _Particles[other_idx];
+            float2 offset = other.predictedPosition - self.predictedPosition;
+            float sqrD = dot(offset, offset);
+            if (sqrD > sqrH) continue;
+
+                float dst = sqrt(sqrD);
+            float laplacian = ViscosityKernelLaplacian2D(dst, _SmoothingRadius);
+            float2 velDiff = other.velocity - self.velocity; // (vⱼ − vᵢ)
+            float otherDensity = max(other.density, 0.0001);
+
+            // Eq. 14: μ · mⱼ · (vⱼ − vᵢ) / ρⱼ · ∇²W
+            viscForce += _Mass * (velDiff / otherDensity) * laplacian;
+        }
+    }
+
+    // Accumulate — pressure force already stored here from previous kernel
+    _Particles[id.x].force += (_ViscosityCoeff * viscForce);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  KERNEL: CalculateSurfaceTension  (Eq. 19)
+//
+//  Steps per particle i:
+//    1. Build colour-field value  cₛ(i)  (Eq. 15)  using Wpoly6
+//    2. Build surface normal      n(i)   (Eq. 16) = ∇cₛ  (gradient of Wpoly6)
+//    3. Build curvature           κ(i)   (Eq. 17) = −∇²cₛ / |n|
+//    4. f_surf = σ κ n/|n| · δₛ          (Eq. 18–19, δₛ = |n|)
+//             = −σ ∇²cₛ · n/|n|
+//    5. Only apply when |n| > threshold  (Eq. 23)
+//
+//  Result is ACCUMULATED into particle.force (runs after viscosity).
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void CalculateSurfaceTension(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _ParticleCount) return;
+
+        ParticleData self = _Particles[id.x];
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    float h = _SmoothingRadius;
+
+    // Accumulators for colour-field gradient (normal) and laplacian (curvature)
+    float2 colorFieldGradient = float2(0.0, 0.0); // ∇cₛ
+    float colorFieldLaplacian = 0.0; // ∇²cₛ
+
+    int2 centreCell = PositionToCellCoord(self.predictedPosition, h);
+
+    [unroll]
+    for (int n = 0; n < 9; n++ )
+    {
+        int2 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell));
+        uint start = _StartIndices[key];
+        if (start == UINT_MAX) continue;
+
+            for (uint j = start; j < (uint)_PaddedCount; j++ )
+        {
+            SpatialEntry entry = _SpatialLookup[j];
+            if (entry.cellKey != key) break;
+                if (entry.particleIndex == UINT_MAX) continue;
+
+                uint other_idx = entry.particleIndex;
+            if (other_idx == id.x) continue;
+
+                ParticleData other = _Particles[other_idx];
+            float2 offset = other.predictedPosition - self.predictedPosition;
+            float sqrD = dot(offset, offset);
+            if (sqrD > sqrH) continue;
+
+                float dst = sqrt(sqrD);
+            float otherDensity = max(other.density, 0.0001);
+            float mOverRho = _Mass / otherDensity; // mⱼ / ρⱼ (Eqs.15–16)
+
+            // ── Colour-field gradient  ∇cₛ  (Eq. 16) ──────────────────
+            //   ∇cₛ(rᵢ) = Σⱼ (mⱼ/ρⱼ) ∇W_poly6(rᵢ − rⱼ)
+            float2 dir = (dst > 0.0001) ? (offset / dst) : float2(0.0, 1.0);
+            float gradScalar = Poly6GradientScalar2D(dst, sqrD, sqrH, h);
+            colorFieldGradient += mOverRho * gradScalar * dir;
+
+            // ── Colour-field Laplacian  ∇²cₛ  (for curvature, Eq. 17) ─
+            //   ∇²cₛ(rᵢ) = Σⱼ (mⱼ/ρⱼ) ∇²W_poly6(rᵢ − rⱼ)
+            float lapScalar = Poly6LaplacianScalar2D(sqrD, sqrH, h);
+            colorFieldLaplacian += mOverRho * lapScalar;
+        }
+    }
+
+    // ── Surface-normal magnitude  |n|  =  |∇cₛ| ─────────────────────
+    float normalMag = length(colorFieldGradient);
+
+    // Only apply force where the surface is well-defined (Eq. 23)
+    if (normalMag <= _SurfaceTensionThreshold) return;
+
+        // ── Surface force  f = −σ ∇²cₛ · (n / |n|)  (Eq. 19) ────────────
+    float2 surfaceNormal = colorFieldGradient / normalMag;
+    float2 surfForce = -_SurfaceTensionCoeff * colorFieldLaplacian * surfaceNormal;
+
+    _Particles[id.x].force += surfForce;
+}
+
+//  KERNEL: CalculatePressureForces
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _ParticleCount) return;
+
+        ParticleData self = _Particles[id.x];
+    float2 pressForce = float2(0.0, 0.0);
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+
+    int2 centreCell = PositionToCellCoord(self.predictedPosition, _SmoothingRadius);
+
+    [unroll]
+    for (int n = 0; n < 9; n++ )
+    {
+        int2 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell));
+        uint start = _StartIndices[key];
+
+        if (start == UINT_MAX) continue;
+
+            for (uint j = start; j < (uint)_PaddedCount; j++ )
+        {
+            SpatialEntry entry = _SpatialLookup[j];
+            if (entry.cellKey != key) break;
+                if (entry.particleIndex == UINT_MAX) continue;
+
+                uint other_idx = entry.particleIndex;
+            if (other_idx == id.x) continue;
+
+                ParticleData other = _Particles[other_idx];
+            float2 offset = other.predictedPosition - self.predictedPosition;
+            float sqrD = dot(offset, offset);
+
+            if (sqrD > sqrH) continue;
+
+                float dst = sqrt(sqrD);
+            float2 dir = (dst > 0.0) ? (offset / dst) : float2(0.0, 1.0);
+            float slope = SmoothingKernelDerivative(dst, _SmoothingRadius);
+            float sharedP = (self.pressure + other.pressure) * 0.5;
+            float otherDensity = max(other.density, 0.0001);
+            // float selfDensity = max(self.density, 0.0001);
+
+            pressForce += dir * (sharedP * slope * _Mass) / otherDensity;
+        }
+    }
+
+    _Particles[id.x].force = pressForce;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+//  KERNEL: Integrate
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void Integrate(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _ParticleCount) return;
+
+        ParticleData p = _Particles[id.x];
+    float density = max(p.density, 0.0001);
+
+    p.velocity += (p.force / density) * _DeltaTime;
+    p.position += p.velocity * _DeltaTime;
+
+    float2 minB = _BoundsMin + _ParticleRadius;
+    float2 maxB = _BoundsMax - _ParticleRadius;
+
+    if (p.position.x < minB.x) { p.position.x = minB.x; p.velocity.x *= -_CollisionDamping; }
+    else if (p.position.x > maxB.x) { p.position.x = maxB.x; p.velocity.x *= -_CollisionDamping; }
+
+    if (p.position.y < minB.y) { p.position.y = minB.y; p.velocity.y *= -_CollisionDamping; }
+    else if (p.position.y > maxB.y) { p.position.y = maxB.y; p.velocity.y *= -_CollisionDamping; }
+
+    _Particles[id.x]= p;
+}

@@ -1,0 +1,113 @@
+// Shaders/ParticleDepth3D_URP.shader
+// ──────────────────────────────────────────────────────────────────────────────
+// Renders one billboard quad per particle.
+// Reads position from the ParticleData3D ComputeBuffer (set via C#).
+//
+// Fragment outputs:
+//   SV_Target  = float4(linearDepth, 0, 0, linearDepth)
+//                  .r = depth to blur
+//                  .a = depth reference (preserved unchanged by all blur passes)
+//   SV_Depth   = reconstructed hardware depth (for correct Z-order)
+//
+// This is a direct URP port of Sebastian's ParticleDepth.shader combined with
+// my ParticleDepth3D.shader — logic is identical, only the include changed
+// (UnityCG.cginc → Core.hlsl).
+// ──────────────────────────────────────────────────────────────────────────────
+Shader "Fluid/ParticleDepth3D_URP"
+{
+    SubShader
+    {
+        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
+        Cull Off
+        ZWrite On
+        ZTest LEqual
+
+        Pass
+        {
+            Name "FluidParticleDepth"
+            Tags { "LightMode" = "UniversalForward" }
+
+            HLSLPROGRAM
+            #pragma vertex   vert
+            #pragma fragment frag
+            #pragma target   4.5
+
+            // URP core includes (replaces UnityCG.cginc)
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            // ── Particle positions — flat float3 buffer, matches PhysicsSystem3D ─
+            StructuredBuffer<float3> Positions; // C# sets this via SetBuffer("Positions", PositionsBuffer)
+            float scale;
+
+            // ── Vertex/fragment structs ────────────────────────────────────────
+            struct Attributes
+            {
+                float3 positionOS : POSITION;
+                float2 uv         : TEXCOORD0;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float2 uv         : TEXCOORD0;
+                float3 positionWS : TEXCOORD1;
+            };
+
+            // ── Vertex shader ──────────────────────────────────────────────────
+            Varyings vert(Attributes IN, uint instanceID : SV_InstanceID)
+            {
+                Varyings OUT;
+
+                float3 worldCentre = Positions[instanceID];
+
+                // Billboard the quad in camera right / up (world space)
+                // UNITY_MATRIX_I_V gives the camera-to-world matrix in URP.
+                float3 camRight = UNITY_MATRIX_I_V._m00_m10_m20;
+                float3 camUp    = UNITY_MATRIX_I_V._m01_m11_m21;
+
+                // scale * 2 because quad verts are in [-0.5, +0.5]
+                float3 offset   = IN.positionOS * scale * 2.0;
+                float3 worldPos = worldCentre
+                                + camRight * offset.x
+                                + camUp    * offset.y;
+
+                OUT.positionCS = mul(UNITY_MATRIX_VP, float4(worldPos, 1.0));
+                OUT.positionWS = worldPos;
+                OUT.uv         = IN.uv;
+                return OUT;
+            }
+
+            // ── Reconstruct Unity clip-space depth from linear eye depth ───────
+            // Identical to Sebastian's helper — translates linear depth to the
+            // non-linear value the hardware depth buffer expects.
+            float LinearDepthToClipDepth(float linearDepth)
+            {
+                // Convert linear depth to 0-1 range between near/far planes
+                float depth01 = (linearDepth - _ProjectionParams.y)
+                              / (_ProjectionParams.z - _ProjectionParams.y);
+                // Invert the perspective divide
+                return (1.0 - depth01 * _ZBufferParams.y) / (depth01 * _ZBufferParams.x);
+            }
+
+            // ── Fragment shader ────────────────────────────────────────────────
+            float4 frag(Varyings IN, out float outDepth : SV_Depth) : SV_Target
+            {
+                // Circular disc mask — discard corners outside the sphere cross-section
+                float2 centreOffset = (IN.uv - 0.5) * 2.0;
+                float  sqrDst       = dot(centreOffset, centreOffset);
+                clip(1.0 - sqrDst); // discard if outside unit circle
+
+                // Reconstruct sphere front surface depth
+                float z           = sqrt(1.0 - sqrDst);
+                float dcam        = length(IN.positionWS - _WorldSpaceCameraPos);
+                float linearDepth = dcam - z * scale;
+
+                outDepth = LinearDepthToClipDepth(linearDepth);
+
+                // Pack: r = blurrable depth, a = reference depth (never blurred)
+                return float4(linearDepth, 0, 0, linearDepth);
+            }
+            ENDHLSL
+        }
+    }
+}

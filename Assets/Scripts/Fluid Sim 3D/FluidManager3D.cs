@@ -10,9 +10,18 @@ public class FluidManager3D : MonoBehaviour
     [SerializeField] ComputeShader oneSweepShader;
     [SerializeField] Material particleMaterial;
 
+    [Header("Time Step")] public float normalTimeScale = 1;
+    public float slowTimeScale = 0.1f;
+    public float maxTimestepFPS = 60; // if time-step dips lower than this fps, simulation will run slower (set to 0 to disable)
+    public int iterationsPerFrame = 3;
+    public bool inSlowMode = false;
+
+
     SpawnSystem3D _spawnSystem;
     PhysicsSystem3D _physicsSystem;
     RenderSystem3D _renderSystem;
+
+    private float ActiveTimeScale => inSlowMode ? slowTimeScale : normalTimeScale;
     bool _initialized;
 
     int _lastParticleCount;
@@ -32,7 +41,8 @@ public class FluidManager3D : MonoBehaviour
     float _lastSurfaceTensionCoeff;
     float _lastSurfaceTensionThreshold;
 
-    public ComputeBuffer ParticleBuffer => _physicsSystem?.ParticleBuffer;
+    public ComputeBuffer PositionsBuffer => _physicsSystem?.PositionsBuffer;
+    public ComputeBuffer VelocitiesBuffer => _physicsSystem?.VelocitiesBuffer;
     public int ParticleCount => _physicsSystem?.ParticleCount ?? 0;
 
     void Awake()
@@ -44,8 +54,6 @@ public class FluidManager3D : MonoBehaviour
     void Start()
     {
         Debug.Log("FluidManager3D Start called.");
-        float deltaTime = 1 / 60f;
-        Time.fixedDeltaTime = deltaTime;
         if (settings != null)
             settings.OnChanged += OnSettingsChanged;
 
@@ -76,35 +84,40 @@ public class FluidManager3D : MonoBehaviour
         InitializeSystems();
     }
 
-    void FixedUpdate()
+    void Update()
     {
         if (!Application.isPlaying || !_initialized || boundaryVolume == null) return;
-
-        // Interaction placeholder. In 3D you would normally raycast to find an interaction plane.
-        Vector3 interactionPos = Vector3.zero;
-        float currentStrength = 0f;
-
-        for (int i = 0; i < 3; i++)
-        {
-            _physicsSystem.Simulate(
-          settings,
-          Time.fixedDeltaTime / 3,
-          boundaryVolume.LocalMin,
-          boundaryVolume.LocalMax,
-          boundaryVolume.WorldToColliderLocalMatrix,
-          boundaryVolume.ColliderLocalToWorldMatrix,
-          interactionPos,
-          currentStrength);
-        }
+        float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; // If framerate dips too low, run the simulation slower than real-time
+        float dt = Mathf.Min(Time.deltaTime * ActiveTimeScale, maxDeltaTime);
+        RunSimulationFrame(dt);
 
     }
 
-    void LateUpdate()
+    void RunSimulationFrame(float frameDeltaTime)
     {
+        float subStepDeltaTime = frameDeltaTime / iterationsPerFrame;
+        _physicsSystem.BindStaticUniforms(
+            settings,
+            subStepDeltaTime,
+            boundaryVolume.LocalMin,
+            boundaryVolume.LocalMax,
+            boundaryVolume.WorldToColliderLocalMatrix,
+            boundaryVolume.ColliderLocalToWorldMatrix,
+            Vector3.zero,
+            0
+        );
+        // Simulation sub-steps
+        for (int i = 0; i < iterationsPerFrame; i++)
+        {
+            _physicsSystem.Simulate();
+        }
+
         if (!_initialized || boundaryVolume == null) return;
         Bounds bounds = boundaryVolume.WorldBounds;
         _renderSystem.Render(_physicsSystem.ParticleCount, bounds);
+
     }
+
 
     void OnDestroy()
     {
@@ -125,10 +138,18 @@ public class FluidManager3D : MonoBehaviour
             particleMaterial = new Material(Shader.Find("Fluid/ParticleCircle3D"));
 
         _renderSystem = new RenderSystem3D(particleMaterial);
-        ParticleData3D[] particles = _spawnSystem.SpawnParticles(boundaryVolume);
+        SpawnData3D spawnData = _spawnSystem.SpawnParticles(boundaryVolume);
 
-        _physicsSystem.Initialize(settings, particles);
-        _renderSystem.Initialize(settings, _physicsSystem.ParticleBuffer);
+        _physicsSystem.Initialize(
+            settings, spawnData, Time.fixedDeltaTime / 3,
+            boundaryVolume.LocalMin,
+            boundaryVolume.LocalMax,
+            boundaryVolume.WorldToColliderLocalMatrix,
+            boundaryVolume.ColliderLocalToWorldMatrix,
+            Vector3.zero,
+            0
+        );
+        _renderSystem.Initialize(settings, _physicsSystem.PositionsBuffer, _physicsSystem.VelocitiesBuffer);
 
         CacheSettings();
         _initialized = true;
@@ -170,11 +191,6 @@ public class FluidManager3D : MonoBehaviour
         {
             InitializeSystems();
             return;
-        }
-
-        if (physicsChange)
-        {
-            _physicsSystem.BindStaticUniforms(settings);
         }
 
         if (_lastVelocityDisplayMax != settings.velocityDisplayMax)

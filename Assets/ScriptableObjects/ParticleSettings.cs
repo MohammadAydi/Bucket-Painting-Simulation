@@ -57,9 +57,9 @@ public class ParticleSettings : ScriptableObject
     public float gravity = -9.81f;
     [Range(0f, 1f)]
     public float collisionDamping = 0.8f;
-    [Range(0f, 500f)]
+    [Range(0f, 1000f)]
     public float pressureMultiplier = 2.0f;
-    [Range(0f, 100f)]
+    [Range(0f, 1000f)]
     public float targetDensity = 2.0f;
 
     [Header("Viscosity")]

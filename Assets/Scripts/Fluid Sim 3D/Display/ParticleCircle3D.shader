@@ -21,17 +21,20 @@ Shader "Fluid/ParticleCircle3D"
             #include "UnityCG.cginc"
 
             // ── Particle data layout ─────────────────────────────────────────
-            struct ParticleData
-            {
-                float4 position;
-                float4 predictedPosition;
-                float4 velocity;
-                float4 force;
-                float density;
-                float pressure;
-            };
-
-            StructuredBuffer<ParticleData> _Particles;
+            // struct ParticleData
+            // {
+            //     float4 position;
+            //     float4 predictedPosition;
+            //     float4 velocity;
+            //     float4 force;
+            //     float density;
+            //     float pressure;
+            // };
+            //
+            // StructuredBuffer<ParticleData> _Particles;
+            
+            StructuredBuffer<float3> _Position;
+            StructuredBuffer<float3> _Velocity;
             Texture2D<float4> _ColourMap;
             SamplerState linear_clamp_sampler;
 
@@ -54,13 +57,14 @@ Shader "Fluid/ParticleCircle3D"
             // ── Vertex shader ─────────────────────────────────────────────────
             v2f vert(appdata v, uint instanceID : SV_InstanceID)
             {
-                ParticleData p = _Particles[instanceID];
+                float3 position = _Position[instanceID];
+                float3 velocity = _Velocity[instanceID];
 
                 // Our C# mesh vertices go from -1 to 1, exactly what we need
                 float2 quadOffset = v.vertex.xy;
 
                 // Transform particle center to view space
-                float4 viewPos = mul(UNITY_MATRIX_V, float4(p.position.xyz, 1.0));
+                float4 viewPos = mul(UNITY_MATRIX_V, float4(position, 1.0));
                 
                 // Add the billboard offset in view space
                 viewPos.xy += quadOffset * _ParticleRadius;
@@ -69,7 +73,7 @@ Shader "Fluid/ParticleCircle3D"
                 o.pos = mul(UNITY_MATRIX_P, viewPos);
 
                 // Velocity colouring
-                float speed = length(p.velocity.xyz);
+                float speed = length(velocity);
                 float speedT = saturate(speed / max(_VelocityMax, 0.0001));
                 o.color = _ColourMap.SampleLevel(linear_clamp_sampler, float2(speedT, 0.5), 0).rgb;
                 

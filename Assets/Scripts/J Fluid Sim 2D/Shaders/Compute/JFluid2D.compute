@@ -4,7 +4,7 @@
 #include "./FluidMaths2D.hlsl"
 
 
-static const int NumThreads = 64;
+static const int NumThreads = 256;
 // Buffers
 RWStructuredBuffer<float2> Positions;
 RWStructuredBuffer<float2> Velocities;

@@ -5,7 +5,8 @@ using UnityEngine.Rendering;
 public sealed class RenderSystem3D : IDisposable
 {
     // ── Shader property IDs ──────────────────────────────────────────────────
-    static readonly int ParticlesId = Shader.PropertyToID("_Particles");
+    static readonly int PositionId = Shader.PropertyToID("_Position");
+    static readonly int VelocityId = Shader.PropertyToID("_Velocity");
     static readonly int ParticleRadiusId = Shader.PropertyToID("_ParticleRadius");
     static readonly int ColourMapId = Shader.PropertyToID("_ColourMap");
     static readonly int VelocityMaxId = Shader.PropertyToID("_VelocityMax");
@@ -25,11 +26,16 @@ public sealed class RenderSystem3D : IDisposable
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
-    public void Initialize(ParticleSettings settings, ComputeBuffer particlesBuffer)
+    public void Initialize(
+     ParticleSettings settings,
+     ComputeBuffer positionsBuffer,
+     ComputeBuffer velocitiesBuffer)
     {
         CreateQuadMesh();
         SyncMaterial(settings);
-        _material.SetBuffer(ParticlesId, particlesBuffer);
+
+        _material.SetBuffer(PositionId, positionsBuffer);
+        _material.SetBuffer(VelocityId, velocitiesBuffer);
     }
 
     public void SyncMaterial(ParticleSettings settings)

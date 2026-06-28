@@ -3,81 +3,103 @@ Shader "Fluid/ParticleCircle3D"
     Properties
     {
         _ParticleRadius ("Particle Radius", Float) = 0.1
-        _VelocityMax    ("Velocity Max",    Float) = 5.0
+        _VelocityMax ("Velocity Max", Float) = 5.0
     }
 
     SubShader
     {
-        Tags { "Queue" = "Geometry" "RenderType" = "Opaque" }
+        Tags { "Queue" = "AlphaTest" "RenderType" = "TransparentCutout" }
         ZWrite On
-        Cull Back
+        Cull Off
 
         Pass
         {
             CGPROGRAM
-            #pragma target   4.5
-            #pragma vertex   vert
+            #pragma target 4.5
+            #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
 
-            // ── Particle data layout must match ParticleData3D struct ──────────
-            struct ParticleData
-            {
-                float4 position;
-                float4 predictedPosition;
-                float4 velocity;
-                float4 force;
-                float  density;
-                float  pressure;
-            };
-
-            StructuredBuffer<ParticleData> _Particles;
-
-            Texture2D<float4>  _ColourMap;
-            SamplerState       linear_clamp_sampler;
+            // ── Particle data layout ─────────────────────────────────────────
+            // struct ParticleData
+            // {
+            //     float4 position;
+            //     float4 predictedPosition;
+            //     float4 velocity;
+            //     float4 force;
+            //     float density;
+            //     float pressure;
+            // };
+            //
+            // StructuredBuffer<ParticleData> _Particles;
+            
+            StructuredBuffer<float3> _Position;
+            StructuredBuffer<float3> _Velocity;
+            Texture2D<float4> _ColourMap;
+            SamplerState linear_clamp_sampler;
 
             float _ParticleRadius;
             float _VelocityMax;
 
-            // ── V2F ──────────────────────────────────────────────────────────
+            // ── Structs ──────────────────────────────────────────────────────
+            struct appdata
+            {
+                float4 vertex : POSITION;
+            };
+
             struct v2f
             {
-                float4 pos    : SV_POSITION;
-                float3 color  : TEXCOORD0;
-                float3 normal : TEXCOORD1;  // world-space normal for diffuse shading
+                float4 pos : SV_POSITION;
+                float3 color : TEXCOORD0;
+                float2 uv : TEXCOORD1;
             };
 
             // ── Vertex shader ─────────────────────────────────────────────────
-            // Each instance is one particle. The mesh is a unit sphere, so we
-            // scale every vertex by _ParticleRadius and offset it to world space.
-            v2f vert(appdata_full v, uint instanceID : SV_InstanceID)
+            v2f vert(appdata v, uint instanceID : SV_InstanceID)
             {
-                ParticleData p = _Particles[instanceID];
+                float3 position = _Position[instanceID];
+                float3 velocity = _Velocity[instanceID];
 
-                // Place scaled sphere vertex in world space
-                float3 worldPos = p.position.xyz + mul(unity_ObjectToWorld, v.vertex * _ParticleRadius).xyz;
-                float3 objPos   = mul(unity_WorldToObject, float4(worldPos, 1)).xyz;
+                // Our C# mesh vertices go from -1 to 1, exactly what we need
+                float2 quadOffset = v.vertex.xy;
 
-                // Velocity → colour via gradient texture
-                float speed  = length(p.velocity.xyz);
-                float speedT = saturate(speed / max(_VelocityMax, 0.0001));
-                float3 col   = _ColourMap.SampleLevel(linear_clamp_sampler, float2(speedT, 0.5), 0).rgb;
+                // Transform particle center to view space
+                float4 viewPos = mul(UNITY_MATRIX_V, float4(position, 1.0));
+                
+                // Add the billboard offset in view space
+                viewPos.xy += quadOffset * _ParticleRadius;
 
                 v2f o;
-                o.pos    = UnityObjectToClipPos(objPos);
-                o.color  = col;
-                o.normal = UnityObjectToWorldNormal(v.normal);
+                o.pos = mul(UNITY_MATRIX_P, viewPos);
+
+                // Velocity colouring
+                float speed = length(velocity);
+                float speedT = saturate(speed / max(_VelocityMax, 0.0001));
+                o.color = _ColourMap.SampleLevel(linear_clamp_sampler, float2(speedT, 0.5), 0).rgb;
+                
+                o.uv = quadOffset; 
                 return o;
             }
 
             // ── Fragment shader ───────────────────────────────────────────────
             fixed4 frag(v2f i) : SV_Target
             {
-                // Simple diffuse: dot(normal, light direction)
-                // The +0.6/1.4 lift prevents the shadow side going pitch black,
-                // giving the same soft ambient look as the instructor's shader.
-                float shading = saturate(dot(_WorldSpaceLightPos0.xyz, normalize(i.normal)));
+                // Circular alpha mask
+                float distSq = dot(i.uv, i.uv);
+                if (distSq > 1.0) 
+                    discard; 
+
+                // Calculate fake Z to reconstruct a spherical normal
+                float z = sqrt(1.0 - distSq);
+                
+                // Construct the normal in view space, then convert to world space
+                float3 viewNormal = float3(i.uv.x, i.uv.y, z);
+                float3 worldNormal = mul((float3x3)UNITY_MATRIX_I_V, viewNormal);
+
+                // Diffuse shading
+                float shading = saturate(dot(_WorldSpaceLightPos0.xyz, normalize(worldNormal)));
                 shading = (shading + 0.6) / 1.4;
+                
                 return fixed4(i.color * shading, 1.0);
             }
 

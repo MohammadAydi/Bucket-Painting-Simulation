@@ -2,23 +2,20 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-/// Responsible for drawing all fluid particles in a single GPU-instanced call.
-/// Uses a sphere mesh (via SphereGenerator) and a baked gradient texture to
-/// colour each particle by its velocity magnitude.
-/// 
 public sealed class RenderSystem3D : IDisposable
 {
     // ── Shader property IDs ──────────────────────────────────────────────────
-    static readonly int ParticlesId      = Shader.PropertyToID("_Particles");
+    static readonly int PositionId = Shader.PropertyToID("_Position");
+    static readonly int VelocityId = Shader.PropertyToID("_Velocity");
     static readonly int ParticleRadiusId = Shader.PropertyToID("_ParticleRadius");
-    static readonly int ColourMapId      = Shader.PropertyToID("_ColourMap");
-    static readonly int VelocityMaxId    = Shader.PropertyToID("_VelocityMax");
+    static readonly int ColourMapId = Shader.PropertyToID("_ColourMap");
+    static readonly int VelocityMaxId = Shader.PropertyToID("_VelocityMax");
 
     // ── State ────────────────────────────────────────────────────────────────
-    readonly Material             _material;
+    readonly Material _material;
     readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
 
-    Mesh      _mesh;
+    Mesh _quadMesh;
     Texture2D _gradientTexture;
 
     // ── Construction ─────────────────────────────────────────────────────────
@@ -29,67 +26,85 @@ public sealed class RenderSystem3D : IDisposable
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
-
-    /// Builds the sphere mesh and uploads all material parameters.
-    public void Initialize(ParticleSettings settings)
+    public void Initialize(
+     ParticleSettings settings,
+     ComputeBuffer positionsBuffer,
+     ComputeBuffer velocitiesBuffer)
     {
-        RebuildMesh(settings.sphereResolution);
+        CreateQuadMesh();
         SyncMaterial(settings);
+
+        _material.SetBuffer(PositionId, positionsBuffer);
+        _material.SetBuffer(VelocityId, velocitiesBuffer);
     }
 
-    /// Uploads only the material-side settings (colour, velocity max)
     public void SyncMaterial(ParticleSettings settings)
     {
         _material.SetFloat(ParticleRadiusId, settings.radius);
-        _material.SetFloat(VelocityMaxId,    settings.velocityDisplayMax);
+        _material.SetFloat(VelocityMaxId, settings.velocityDisplayMax);
 
         BakeGradient(settings.colourMap, settings.gradientResolution);
         _material.SetTexture(ColourMapId, _gradientTexture);
     }
 
-    /// Destroys the current sphere mesh and recreates it at a new resolution.
-    public void RebuildMesh(int resolution)
+    /// Issues the procedural draw call. Call every frame from LateUpdate.
+    public void Render(int particleCount, Bounds bounds)
     {
-        DestroyMesh();
-        _mesh = SebStuff.SphereGenerator.GenerateSphereMesh(resolution);
-        _mesh.name = "ParticleSphereMesh";
-    }
-
-    /// Issues the instanced draw call. Call every frame from LateUpdate.
-    public void Render(ComputeBuffer particlesBuffer, int particleCount, Bounds bounds)
-    {
-        if (_mesh == null || particlesBuffer == null || particleCount <= 0)
+        if (particleCount <= 0)
             return;
 
-        _propertyBlock.Clear();
-        _propertyBlock.SetBuffer(ParticlesId, particlesBuffer);
 
+        // Switch to DrawProcedural generating 4 vertices per instance (quads)
         Graphics.DrawMeshInstancedProcedural(
-            _mesh,
-            0,
-            _material,
-            bounds,
-            particleCount,
-            _propertyBlock,
-            ShadowCastingMode.Off,
-            receiveShadows: false,
-            layer: 0,
-            camera: null,
-            LightProbeUsage.Off,
-            lightProbeProxyVolume: null);
+             _quadMesh,
+             0,
+             _material,
+             bounds,
+             particleCount,
+             _propertyBlock,
+             ShadowCastingMode.Off,
+             receiveShadows: false,
+             layer: 0,
+             camera: null,
+             LightProbeUsage.Off,
+             lightProbeProxyVolume: null
+         );
     }
 
     public void Dispose()
     {
-        DestroyMesh();
         DestroyGradientTexture();
+    }
+    /// Creates a 4-vertex quad spanning from -1 to 1.
+    void CreateQuadMesh()
+    {
+        DestroyMesh();
+        _quadMesh = new Mesh { name = "ParticleQuad" };
+
+        // Vertices from -1 to 1 to match our circular alpha mask math perfectly
+        _quadMesh.vertices = new Vector3[] {
+            new Vector3(-1, -1, 0),
+            new Vector3( 1, -1, 0),
+            new Vector3(-1,  1, 0),
+            new Vector3( 1,  1, 0)
+        };
+
+        _quadMesh.triangles = new int[] { 0, 2, 1, 2, 3, 1 };
+    }
+
+    void DestroyMesh()
+    {
+        if (_quadMesh == null) return;
+
+        if (Application.isPlaying)
+            UnityEngine.Object.Destroy(_quadMesh);
+        else
+            UnityEngine.Object.DestroyImmediate(_quadMesh);
+
+        _quadMesh = null;
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
-
-
-    /// Bakes a Unity Gradient into a 1-D Texture2D so the shader can sample it.
-    /// Re-uses the existing texture if the resolution has not changed.
     void BakeGradient(Gradient gradient, int resolution)
     {
         resolution = Mathf.Max(2, resolution);
@@ -99,9 +114,9 @@ public sealed class RenderSystem3D : IDisposable
             DestroyGradientTexture();
             _gradientTexture = new Texture2D(resolution, 1, TextureFormat.RGBA32, mipChain: false)
             {
-                wrapMode   = TextureWrapMode.Clamp,
+                wrapMode = TextureWrapMode.Clamp,
                 filterMode = FilterMode.Bilinear,
-                name       = "VelocityGradient"
+                name = "VelocityGradient"
             };
         }
 
@@ -114,18 +129,6 @@ public sealed class RenderSystem3D : IDisposable
 
         _gradientTexture.SetPixels(pixels);
         _gradientTexture.Apply();
-    }
-
-    void DestroyMesh()
-    {
-        if (_mesh == null) return;
-
-        if (Application.isPlaying)
-            UnityEngine.Object.Destroy(_mesh);
-        else
-            UnityEngine.Object.DestroyImmediate(_mesh);
-
-        _mesh = null;
     }
 
     void DestroyGradientTexture()

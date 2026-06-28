@@ -114,7 +114,7 @@ public class FluidManager3D : MonoBehaviour
 
         if (!_initialized || boundaryVolume == null) return;
         Bounds bounds = boundaryVolume.WorldBounds;
-        _renderSystem.Render(_physicsSystem.ParticleCount, bounds);
+        // _renderSystem.Render(_physicsSystem.ParticleCount, bounds);
 
     }
 

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 [ExecuteAlways]
 public class FluidManager2D : MonoBehaviour
@@ -27,9 +28,15 @@ public class FluidManager2D : MonoBehaviour
     bool _lastShowDensity;
 
     float _lastMass;
+    float _lastGravity;
     float _lastPressureMultiplier;
     float _lastTargetDensity;
     float _lastCollisionDamping;
+    float _lastInteractionRadius;
+
+    float _lastViscosityCoeff;
+    float _lastSurfaceTensionCoeff;
+    float _lastSurfaceTensionThreshold;
 
     void Awake()
     {
@@ -62,6 +69,8 @@ public class FluidManager2D : MonoBehaviour
     void Start()
     {
         Debug.Log("FluidManager2D Start called.");
+        float deltaTime = 1 / 60f;
+        Time.fixedDeltaTime = deltaTime;
         if (settings != null)
         {
             settings.OnChanged += OnSettingsChanged;
@@ -111,7 +120,34 @@ public class FluidManager2D : MonoBehaviour
             return;
         }
 
-        _physicsSystem.Simulate(settings, Time.fixedDeltaTime, BoundsMin, BoundsMax);
+        // Initialize default safe states
+        Vector2 mouseWorldPos = Vector2.zero;
+        float currentStrength = 0f;
+
+        // Ensure camera exists and a mouse is actually connected/active
+        if (cameraRef != null && Mouse.current != null)
+        {
+            Debug.Log("FluidManager2D FixedUpdate: Processing mouse input.");
+            // New Input System: Read the current cursor coordinates on screen
+            Vector2 mouseScreenPos = Mouse.current.position.ReadValue();
+            mouseWorldPos = cameraRef.ScreenToWorldPoint(mouseScreenPos);
+
+            // New Input System: Left Click = Pull (Positive strength)
+            if (Mouse.current.leftButton.isPressed)
+            {
+                currentStrength = settings.interactionStrength;
+            }
+            // New Input System: Right Click = Push (Negative strength)
+            else if (Mouse.current.rightButton.isPressed)
+            {
+                currentStrength = -settings.interactionStrength;
+            }
+        }
+        for (int i = 0; i < 3; i++)
+        {
+            // Pass the calculated interaction profiles directly to the execution pipeline
+            _physicsSystem.Simulate(settings, Time.fixedDeltaTime / 3, BoundsMin, BoundsMax, mouseWorldPos, currentStrength);
+        }
     }
 
     void LateUpdate()
@@ -248,7 +284,12 @@ public class FluidManager2D : MonoBehaviour
             _lastMass != settings.mass ||
             _lastPressureMultiplier != settings.pressureMultiplier ||
             _lastTargetDensity != settings.targetDensity ||
-            _lastCollisionDamping != settings.collisionDamping;
+            _lastCollisionDamping != settings.collisionDamping ||
+            _lastGravity != settings.gravity ||
+            _lastInteractionRadius != settings.interactionRadius||
+            _lastViscosityCoeff != settings.viscosityCoeff ||
+            _lastSurfaceTensionCoeff != settings.surfaceTensionCoeff ||
+            _lastSurfaceTensionThreshold != settings.surfaceTensionThreshold;
 
         Debug.Log($"Settings changed. Reinitialize: {requiresReinitialize}, Physics change: {physicsChange}");
 
@@ -281,6 +322,7 @@ public class FluidManager2D : MonoBehaviour
     void CacheSettings()
     {
         _lastMass = settings.mass;
+        _lastGravity = settings.gravity;
         _lastPressureMultiplier = settings.pressureMultiplier;
         _lastTargetDensity = settings.targetDensity;
         _lastCollisionDamping = settings.collisionDamping;
@@ -293,6 +335,10 @@ public class FluidManager2D : MonoBehaviour
         _lastDensityColor = settings.TargetDensityColor;
         _lastSmoothness = settings.smoothness;
         _lastShowDensity = settings.showDensity;
+        _lastInteractionRadius = settings.interactionRadius;
+        _lastViscosityCoeff = settings.viscosityCoeff;
+        _lastSurfaceTensionCoeff = settings.surfaceTensionCoeff;
+        _lastSurfaceTensionThreshold = settings.surfaceTensionThreshold;
     }
 
     Bounds BuildRenderBounds()

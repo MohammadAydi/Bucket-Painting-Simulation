@@ -26,6 +26,7 @@ Shader "Fluid/DensityField2D"
             struct ParticleData
             {
                 float2 position;
+                float2 predictedPosition;
                 float2 velocity;
                 float2 force;
                 float density;

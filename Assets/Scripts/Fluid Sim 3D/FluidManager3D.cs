@@ -114,7 +114,7 @@ public class FluidManager3D : MonoBehaviour
 
         if (!_initialized || boundaryVolume == null) return;
         Bounds bounds = boundaryVolume.WorldBounds;
-        _renderSystem.Render(_physicsSystem.ParticleCount, bounds);
+        // _renderSystem.Render(_physicsSystem.ParticleCount, bounds);
 
     }
 
@@ -169,10 +169,10 @@ public class FluidManager3D : MonoBehaviour
     {
         if (settings == null || !_initialized) return;
 
+
         bool requiresReinitialize =
             _lastParticleCount != settings.particleCount ||
             _lastRadius != settings.radius ||
-            _lastSmoothingRadius != settings.smoothingRadius ||
             _lastParticleSpacing != settings.particleSpacing ||
             _lastSphereResolution != settings.sphereResolution;
 
@@ -186,6 +186,11 @@ public class FluidManager3D : MonoBehaviour
             _lastViscosityCoeff != settings.viscosityCoeff ||
             _lastSurfaceTensionCoeff != settings.surfaceTensionCoeff ||
             _lastSurfaceTensionThreshold != settings.surfaceTensionThreshold;
+
+        if (_lastSmoothingRadius != settings.smoothingRadius)
+        {
+            _physicsSystem.SetSmoothingConstant(settings.smoothingRadius);
+        }
 
         if (requiresReinitialize)
         {

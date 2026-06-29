@@ -38,6 +38,17 @@ public sealed class PhysicsSystem3D : IDisposable
     static readonly int SurfaceTensionCoeffId = Shader.PropertyToID("_SurfaceTensionCoeff");
     static readonly int SurfaceTensionThresholdId = Shader.PropertyToID("_SurfaceTensionThreshold");
 
+    static readonly int Poly6Id = Shader.PropertyToID("K_Poly6");
+    static readonly int SpikyGradientId = Shader.PropertyToID("K_SpikyGradient");
+    static readonly int ViscosityLaplacianId = Shader.PropertyToID("K_ViscosityLaplacian");
+    static readonly int Poly6GradientId = Shader.PropertyToID("K_Poly6Gradient");
+    static readonly int Poly6LaplacianId = Shader.PropertyToID("K_Poly6Laplacian");
+
+    static readonly int SpikyPow2Id = Shader.PropertyToID("K_SpikyPow2");
+    static readonly int SpikyPow3Id = Shader.PropertyToID("K_SpikyPow3");
+    static readonly int SpikyPow2GradId = Shader.PropertyToID("K_SpikyPow2Grad");
+    static readonly int SpikyPow3GradId = Shader.PropertyToID("K_SpikyPow3Grad");
+
 
 
     // static readonly int ParticlesId = Shader.PropertyToID("_Particles");
@@ -160,6 +171,7 @@ public sealed class PhysicsSystem3D : IDisposable
         );
 
         BindStaticUniforms(settings, deltaTime, boundsMin, boundsMax, worldToLocal, localToWorld, interactionPos, interactionStrength);
+        SetSmoothingConstant(settings.smoothingRadius);
         BindAllBuffers();
     }
 
@@ -218,6 +230,45 @@ public sealed class PhysicsSystem3D : IDisposable
 
         _compute.SetVector(InteractionInputPosId, interactionPos);
         _compute.SetFloat(InteractionStrengthId, interactionStrength);
+    }
+
+    public void SetSmoothingConstant(float h)
+    {
+        float h2 = h * h;
+        float h3 = h2 * h;
+        float h4 = h2 * h2;
+        float h5 = h4 * h;
+        float h6 = h3 * h3;
+        float h9 = h6 * h3;
+
+        // Standard SPH kernels
+        _compute.SetFloat(Poly6Id,
+            315f / (64f * Mathf.PI * h9));
+
+        _compute.SetFloat(SpikyGradientId,
+            -45f / (Mathf.PI * h6));
+
+        _compute.SetFloat(ViscosityLaplacianId,
+            45f / (Mathf.PI * h6));
+
+        _compute.SetFloat(Poly6GradientId,
+            -945f / (32f * Mathf.PI * h9));
+
+        _compute.SetFloat(Poly6LaplacianId,
+            -945f / (32f * Mathf.PI * h9));
+
+        // Custom kernels
+        _compute.SetFloat(SpikyPow2Id,
+            15f / (2f * Mathf.PI * h5));
+
+        _compute.SetFloat(SpikyPow3Id,
+            15f / (Mathf.PI * h6));
+
+        _compute.SetFloat(SpikyPow2GradId,
+            15f / (Mathf.PI * h5));
+
+        _compute.SetFloat(SpikyPow3GradId,
+            45f / (Mathf.PI * h6));
     }
 
     void SetInitialBufferData(SpawnData3D spawnData)

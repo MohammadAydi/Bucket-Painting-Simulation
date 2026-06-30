@@ -4,6 +4,7 @@ using UnityEngine;
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(LineRenderer))]
+[DefaultExecutionOrder(10)] 
 public sealed class PbdRope : MonoBehaviour
 {
     [Header("Endpoints")] [Tooltip("Pinned top – the suspension / pivot point.")] [SerializeField]
@@ -142,8 +143,8 @@ public sealed class PbdRope : MonoBehaviour
 
     private void BuildMasses()
     {
-        invMass[0] = 0f; // pivot pin  → infinite mass
-        invMass[n - 1] = 0f; // bob   pin  → infinite mass
+        invMass[0] = 0f; 
+        invMass[n - 1] = 0f; 
 
         float m = Mathf.Max(1e-9f, linearDensity * segLen);
         for (int i = 1; i < n - 1; i++)

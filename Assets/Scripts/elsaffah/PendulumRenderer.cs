@@ -24,7 +24,7 @@ public class MooringLinePBD_Rope : MonoBehaviour
     [Tooltip("Stretch stiffness k_stret in [0,1]. 1 = nearly inextensible (real mooring line behavior).")]
     [Range(0f, 1f)] public float stretchStiffness = 1.0f;
     [Tooltip("Compression stiffness k_comp in [0,1]. Lower values allow some slack/looseness under compression, as a real cable does.")]
-    [Range(0f, 1f)] public float compressionStiffness = 0f;
+    [Range(0f, 1f)] public float compressionStiffness = 0;
 
     [Header("2. Bending Constraint (Section IV-B)")]
     public bool enableBending = true;
@@ -45,6 +45,19 @@ public class MooringLinePBD_Rope : MonoBehaviour
     public Transform pivot;
     [Tooltip("Visual transform for the heavy ball/bucket. Its EDITOR position at Awake() defines the line's initial length and layout.")]
     public Transform ball;
+    [Header("Spherical Pendulum (initial conditions for the free end)")]
+    [Tooltip("When true, overrides positions[numSegments] and velocities[numSegments] at Awake() " +
+            "using the spherical-coordinate initial conditions below (same convention as " +
+            "SphericalPendulum.cs). When false: original behavior, free end starts at rest.")]
+    public bool useSphericalInit = true;
+    [Tooltip("Initial polar angle theta_0 from the downward vertical (deg).")]
+    public float startTheta = 30f;
+    [Tooltip("Initial azimuthal angle phi_0 (deg).")]
+    public float startPhi = 0f;
+    [Tooltip("Initial polar angular velocity theta'_0 (deg/s).")]
+    public float startThetaDot = 0f;
+    [Tooltip("Initial azimuthal angular velocity phi'_0 (deg/s). 0 = planar swing; non-zero = spherical/conical swing.")]
+    public float startPhiDot = 120f;
 
     [Header("Visual Binding - Option A: Pre-authored bones/segments")]
     public Transform[] ropeSegments;
@@ -126,9 +139,38 @@ public class MooringLinePBD_Rope : MonoBehaviour
             float d = Mathf.Clamp(Vector3.Dot(vA / lenA, vB / lenB), -0.9999f, 0.9999f);
             bendRestAngle[m] = Mathf.Acos(d);
         }
+        if (useSphericalInit)
+        {
+            float thetaRad    = startTheta    * Mathf.Deg2Rad;
+            float phiRad      = startPhi      * Mathf.Deg2Rad;
+            float thetaDotRad = startThetaDot * Mathf.Deg2Rad;
+            float phiDotRad   = startPhiDot   * Mathf.Deg2Rad;
+
+            float s  = Mathf.Sin(thetaRad);
+            float c  = Mathf.Cos(thetaRad);
+            float sp = Mathf.Sin(phiRad);
+            float cp = Mathf.Cos(phiRad);
+
+            Vector3 eR     = new Vector3(s * cp, -c, -s * sp);
+            Vector3 eTheta = new Vector3(c * cp,  s,  -c * sp);
+            Vector3 ePhi   = new Vector3(-sp,     0f, -cp);
+
+            positions[numSegments] = pivotPos + totalRopeLength * eR;
+
+            // v = L * ( thetaDot * e_theta + phiDot * sin(theta) * e_phi )
+            velocities[numSegments] =
+                totalRopeLength * (thetaDotRad * eTheta + phiDotRad * s * ePhi);
+
+            for (int i = 1; i < numSegments; i++)
+            {
+                float factor = (float)i / numSegments;
+                positions[i] = Vector3.Lerp(pivotPos, positions[numSegments], factor);
+            }
+        }
 
         SetupVisuals(n);
     }
+
 
     private void SetupVisuals(int nodeCount)
     {
@@ -205,20 +247,26 @@ public class MooringLinePBD_Rope : MonoBehaviour
 
         for (int iter = 0; iter < distanceIterations; iter++)
         {
-            for (int c = 0; c < numSegments; c++)
-            {
-                SolveDistanceConstraint(c, c + 1, restLengthPerSegment);
-            }
+            bool forward = (iter % 2 == 0);
+            if (forward)
+                for (int c = 0; c < numSegments; c++)
+                    SolveDistanceConstraint(c, c + 1, restLengthPerSegment);
+            else
+                for (int c = numSegments - 1; c >= 0; c--)
+                    SolveDistanceConstraint(c, c + 1, restLengthPerSegment);
         }
 
         if (enableBending)
         {
             for (int iter = 0; iter < bendingIterations; iter++)
             {
-                for (int m = 1; m < numSegments; m++)
-                {
-                    SolveBendingConstraint(m - 1, m, m + 1);
-                }
+                bool forward = (iter % 2 == 0);
+                if (forward)
+                    for (int m = 1; m < numSegments; m++)
+                        SolveBendingConstraint(m - 1, m, m + 1);
+                else
+                    for (int m = numSegments - 1; m >= 1; m--)
+                        SolveBendingConstraint(m - 1, m, m + 1);
             }
         }
 

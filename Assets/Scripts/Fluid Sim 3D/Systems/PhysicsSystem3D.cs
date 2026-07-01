@@ -24,6 +24,7 @@ public sealed class PhysicsSystem3D : IDisposable
     static readonly int TargetDensityId = Shader.PropertyToID("_TargetDensity");
     static readonly int PressureSolverModeId = Shader.PropertyToID("_PressureSolverMode");
     static readonly int NearPressureMultiplierId = Shader.PropertyToID("_NearPressureMultiplier");
+
     static readonly int ParticleRadiusId = Shader.PropertyToID("_ParticleRadius");
     static readonly int CollisionDampingId = Shader.PropertyToID("_CollisionDamping");
 
@@ -39,6 +40,9 @@ public sealed class PhysicsSystem3D : IDisposable
     static readonly int ViscosityCoeffId = Shader.PropertyToID("_ViscosityCoeff");
     static readonly int SurfaceTensionCoeffId = Shader.PropertyToID("_SurfaceTensionCoeff");
     static readonly int SurfaceTensionThresholdId = Shader.PropertyToID("_SurfaceTensionThreshold");
+
+    static readonly int JacobiIterationsId = Shader.PropertyToID("_JacobiIterations");
+    static readonly int DensityJacobiIterationsId = Shader.PropertyToID("_DensityJacobiIterations");
 
     static readonly int Poly6Id = Shader.PropertyToID("K_Poly6");
     static readonly int SpikyGradientId = Shader.PropertyToID("K_SpikyGradient");
@@ -69,6 +73,12 @@ public sealed class PhysicsSystem3D : IDisposable
     static readonly int SortTarget_PredictedPositionsId = Shader.PropertyToID("SortTarget_PredictedPositions");
     static readonly int SortTarget_VelocitiesId = Shader.PropertyToID("SortTarget_Velocities");
 
+
+    static readonly int AlphaId = Shader.PropertyToID("_Alphas");
+    static readonly int KappaId = Shader.PropertyToID("_Kappas");
+    static readonly int VelocitiesReadDFId = Shader.PropertyToID("_VelocitiesReadDF");
+    static readonly int VelocitiesWriteDFId = Shader.PropertyToID("_VelocitiesWriteDF");
+
     readonly ComputeShader _compute;
     // readonly ComputeShader _oneSweepShader;
 
@@ -76,14 +86,23 @@ public sealed class PhysicsSystem3D : IDisposable
     readonly int _buildSpatialLookupKernel;
     readonly int _reorderKernel;
     readonly int _reorderCopybackKernel;
+
+    readonly int _copyVelocitiesToDFKernel;
+    readonly int _copyVelocitiesFromDFKernel;
     // readonly int _clearStartIndicesKernel;
     // readonly int _bitonicSortKernel;
     // readonly int _buildStartIndicesKernel;
     readonly int _calculateExternalForceKernel;
     readonly int _updateDensitiesKernel;
     readonly int _calcPressureKernel;
-    readonly int _calcViscosityKernel;
-    readonly int _calcSurfaceTensionKernel;
+    readonly int _computeAlphaKernel;
+    readonly int _computeDivergenceKappaKernel;
+    readonly int _applyDivergenceCorrectionKernel;
+
+    readonly int _computePredictedDensityKappaKernel;
+    readonly int _applyDensityCorrectionKernel;
+    // readonly int _calcViscosityKernel;
+    // readonly int _calcSurfaceTensionKernel;
     readonly int _integrateKernel;
 
 
@@ -91,6 +110,10 @@ public sealed class PhysicsSystem3D : IDisposable
     ComputeBuffer _predictedPositionsBuffer;
     public ComputeBuffer VelocitiesBuffer;
     ComputeBuffer _densityBuffer;
+    ComputeBuffer _alphaBuffer;
+    ComputeBuffer _kappaBuffer;
+    ComputeBuffer _velocitiesDF_A;
+    ComputeBuffer _velocitiesDF_B;
 
     SpatialHash spatialHash;
 
@@ -123,12 +146,21 @@ public sealed class PhysicsSystem3D : IDisposable
         _buildSpatialLookupKernel = _compute.FindKernel("BuildSpatialLookup");
         _reorderKernel = _compute.FindKernel("Reorder");
         _reorderCopybackKernel = _compute.FindKernel("ReorderCopyBack");
+        _copyVelocitiesToDFKernel = _compute.FindKernel("CopyVelocitiesToDF");
+        _copyVelocitiesFromDFKernel = _compute.FindKernel("CopyVelocitiesFromDF");
         // _clearStartIndicesKernel = _compute.FindKernel("ClearStartIndices");
         // _bitonicSortKernel = _compute.FindKernel("BitonicSort");
         // _buildStartIndicesKernel = _compute.FindKernel("BuildStartIndices");
         _calculateExternalForceKernel = _compute.FindKernel("CalculateExternalForce");
         _updateDensitiesKernel = _compute.FindKernel("UpdateDensities");
         _calcPressureKernel = _compute.FindKernel("CalculatePressureForces");
+        _computeAlphaKernel = _compute.FindKernel("ComputeAlpha");
+        _computeDivergenceKappaKernel = _compute.FindKernel("ComputeDivergenceKappa");
+        _applyDivergenceCorrectionKernel = _compute.FindKernel("ApplyDivergenceCorrection");
+        _computePredictedDensityKappaKernel = _compute.FindKernel("ComputePredictedDensityKappa");
+        _applyDensityCorrectionKernel = _compute.FindKernel("ApplyDensityCorrection");
+        _copyVelocitiesToDFKernel = _compute.FindKernel("CopyVelocitiesToDF");
+        _copyVelocitiesFromDFKernel = _compute.FindKernel("CopyVelocitiesFromDF");
         // _calcViscosityKernel = _compute.FindKernel("CalculateViscosityForces");
         // _calcSurfaceTensionKernel = _compute.FindKernel("CalculateSurfaceTension");
         _integrateKernel = _compute.FindKernel("Integrate");
@@ -160,6 +192,11 @@ public sealed class PhysicsSystem3D : IDisposable
             { sortTarget_positionBuffer, SortTarget_PositionsId },
             { sortTarget_predictedPositionsBuffer, SortTarget_PredictedPositionsId },
             { sortTarget_velocityBuffer, SortTarget_VelocitiesId },
+
+            { _alphaBuffer, AlphaId },
+            { _kappaBuffer, KappaId },
+            { _velocitiesDF_A, VelocitiesReadDFId },
+            { _velocitiesDF_B, VelocitiesWriteDFId },
         };
         BindAllBuffers();
 
@@ -179,30 +216,65 @@ public sealed class PhysicsSystem3D : IDisposable
         SetSmoothingConstant(settings.smoothingRadius);
     }
 
-    public void Simulate(
-      )
+    public void Simulate(ParticleSettings settings)
     {
         if (ParticleCount == 0) return;
 
-
-
         int realGroups = Mathf.CeilToInt(ParticleCount / (float)ThreadsPerGroup);
 
-        // _compute.Dispatch(_predictPositionsKernel, realGroups, 1, 1);
         _compute.Dispatch(_buildSpatialLookupKernel, realGroups, 1, 1);
         spatialHash.Run();
         _compute.Dispatch(_reorderKernel, realGroups, 1, 1);
         _compute.Dispatch(_reorderCopybackKernel, realGroups, 1, 1);
-        // DispatchRadixSort();
-        // DispatchBitonicSort(paddedGroups);
-        // _compute.Dispatch(_clearStartIndicesKernel, realGroups, 1, 1);
-        // _compute.Dispatch(_buildStartIndicesKernel, realGroups, 1, 1);
+
         _compute.Dispatch(_updateDensitiesKernel, realGroups, 1, 1);
+        _compute.Dispatch(_computeAlphaKernel, realGroups, 1, 1);
+
         _compute.Dispatch(_calculateExternalForceKernel, realGroups, 1, 1);
-        _compute.Dispatch(_calcPressureKernel, realGroups, 1, 1);
-        // _compute.Dispatch(_calcViscosityKernel, realGroups, 1, 1);
-        // _compute.Dispatch(_calcSurfaceTensionKernel, realGroups, 1, 1);
+
+        // correctDensityError(alpha, v*) (line 13)
+        _compute.SetBuffer(_copyVelocitiesToDFKernel, VelocitiesWriteDFId, _velocitiesDF_A);
+        _compute.Dispatch(_copyVelocitiesToDFKernel, realGroups, 1, 1);
+        ComputeBuffer readBuf = RunJacobiLoop(_computePredictedDensityKappaKernel, _applyDensityCorrectionKernel, settings.densityJacobiIterations, realGroups);
+        _compute.SetBuffer(_copyVelocitiesFromDFKernel, VelocitiesReadDFId, readBuf);
+        _compute.Dispatch(_copyVelocitiesFromDFKernel, realGroups, 1, 1);
+
         _compute.Dispatch(_integrateKernel, realGroups, 1, 1);
+
+        _compute.Dispatch(_buildSpatialLookupKernel, realGroups, 1, 1);
+        spatialHash.Run();
+        _compute.Dispatch(_reorderKernel, realGroups, 1, 1);
+        _compute.Dispatch(_reorderCopybackKernel, realGroups, 1, 1);
+
+        _compute.Dispatch(_updateDensitiesKernel, realGroups, 1, 1);
+        _compute.Dispatch(_computeAlphaKernel, realGroups, 1, 1);
+
+        // correctDivergenceError(alpha, v*) (line 21)
+        _compute.SetBuffer(_copyVelocitiesToDFKernel, VelocitiesWriteDFId, _velocitiesDF_A);
+        _compute.Dispatch(_copyVelocitiesToDFKernel, realGroups, 1, 1);
+        readBuf = RunJacobiLoop(_computeDivergenceKappaKernel, _applyDivergenceCorrectionKernel, settings.jacobiIterations, realGroups);
+        _compute.SetBuffer(_copyVelocitiesFromDFKernel, VelocitiesReadDFId, readBuf);
+        _compute.Dispatch(_copyVelocitiesFromDFKernel, realGroups, 1, 1);
+    }
+
+    ComputeBuffer RunJacobiLoop(int kappaKernel, int applyKernel, int iterations, int realGroups)
+    {
+        ComputeBuffer readBuf = _velocitiesDF_A;
+        ComputeBuffer writeBuf = _velocitiesDF_B;
+
+        for (int i = 0; i < iterations; i++)
+        {
+            _compute.SetBuffer(kappaKernel, VelocitiesReadDFId, readBuf);
+            _compute.Dispatch(kappaKernel, realGroups, 1, 1);
+
+            _compute.SetBuffer(applyKernel, VelocitiesReadDFId, readBuf);
+            _compute.SetBuffer(applyKernel, VelocitiesWriteDFId, writeBuf);
+            _compute.Dispatch(applyKernel, realGroups, 1, 1);
+
+            (readBuf, writeBuf) = (writeBuf, readBuf);
+        }
+
+        return readBuf;
     }
 
     public void Dispose() => DisposeBuffers();
@@ -223,6 +295,8 @@ public sealed class PhysicsSystem3D : IDisposable
         _compute.SetFloat(TargetDensityId, settings.targetDensity);
         _compute.SetInt(PressureSolverModeId, (int)settings.pressureSolverMode);
         _compute.SetFloat(NearPressureMultiplierId, settings.nearPressureMultiplier);
+        _compute.SetInt(JacobiIterationsId, settings.jacobiIterations);
+        _compute.SetInt(DensityJacobiIterationsId, settings.densityJacobiIterations);
         _compute.SetFloat(ParticleRadiusId, settings.radius);
         _compute.SetFloat(CollisionDampingId, settings.collisionDamping);
         _compute.SetFloat(InteractionRadiusId, settings.interactionRadius);
@@ -286,6 +360,7 @@ public sealed class PhysicsSystem3D : IDisposable
         PositionsBuffer.SetData(spawnData.positions);
         _predictedPositionsBuffer.SetData(spawnData.positions);
         VelocitiesBuffer.SetData(spawnData.velocities);
+        _velocitiesDF_A.SetData(spawnData.velocities);
     }
 
     void CreateBuffers()
@@ -295,6 +370,10 @@ public sealed class PhysicsSystem3D : IDisposable
         _predictedPositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
         VelocitiesBuffer = CreateStructuredBuffer<float3>(ParticleCount);
         _densityBuffer = CreateStructuredBuffer<float2>(ParticleCount);
+        _alphaBuffer = CreateStructuredBuffer<float>(ParticleCount);
+        _kappaBuffer = CreateStructuredBuffer<float>(ParticleCount);
+        _velocitiesDF_A = CreateStructuredBuffer<float3>(ParticleCount);
+        _velocitiesDF_B = CreateStructuredBuffer<float3>(ParticleCount);
 
         sortTarget_positionBuffer = CreateStructuredBuffer<float3>(ParticleCount);
         sortTarget_predictedPositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
@@ -342,6 +421,20 @@ public sealed class PhysicsSystem3D : IDisposable
                 sortTarget_velocityBuffer,
                 // spatialHash.SpatialIndices
         });
+
+        // SetBuffers(_compute, _copyVelocitiesToDFKernel, bufferNameLookup, new ComputeBuffer[]
+        // {
+        //     VelocitiesBuffer,
+        //     _velocitiesDF_B,
+        // });
+
+        // SetBuffers(_compute, _copyVelocitiesFromDFKernel, bufferNameLookup, new ComputeBuffer[]
+        // {
+        //     _velocitiesDF_A,
+        //     VelocitiesBuffer,
+        // });
+
+
 
 
         // SetBuffers(_compute, _clearStartIndicesKernel, bufferNameLookup, new ComputeBuffer[]
@@ -405,6 +498,75 @@ public sealed class PhysicsSystem3D : IDisposable
         SetBuffers(_compute, _integrateKernel, bufferNameLookup, new ComputeBuffer[]
         {
             PositionsBuffer,
+            VelocitiesBuffer,
+        });
+
+        SetBuffers(_compute, _computeAlphaKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            _densityBuffer,
+            _alphaBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+        });
+
+        SetBuffers(_compute, _computeDivergenceKappaKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            _alphaBuffer,
+            _kappaBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+            _velocitiesDF_A,
+            _velocitiesDF_B,
+        });
+        SetBuffers(_compute, _applyDivergenceCorrectionKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            _densityBuffer,
+            _alphaBuffer,
+            _kappaBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+            _velocitiesDF_A,
+            _velocitiesDF_B,
+        });
+
+        SetBuffers(_compute, _computePredictedDensityKappaKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            _densityBuffer,
+            _alphaBuffer,
+            _kappaBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+            _velocitiesDF_A,
+            _velocitiesDF_B,
+        });
+
+        SetBuffers(_compute, _applyDensityCorrectionKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            _densityBuffer,
+            _alphaBuffer,
+            _kappaBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+            _velocitiesDF_A,
+            _velocitiesDF_B,
+        });
+
+        SetBuffers(_compute, _copyVelocitiesToDFKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            VelocitiesBuffer,
+        });
+        SetBuffers(_compute, _copyVelocitiesFromDFKernel, bufferNameLookup, new ComputeBuffer[]
+        {
             VelocitiesBuffer,
         });
     }
@@ -471,6 +633,18 @@ public sealed class PhysicsSystem3D : IDisposable
 
         Release(sortTarget_velocityBuffer);
         sortTarget_velocityBuffer = null;
+
+        Release(_alphaBuffer);
+        _alphaBuffer = null;
+
+        Release(_kappaBuffer);
+        _kappaBuffer = null;
+
+        Release(_velocitiesDF_A);
+        _velocitiesDF_A = null;
+
+        Release(_velocitiesDF_B);
+        _velocitiesDF_B = null;
 
         spatialHash?.Release();
         spatialHash = null;

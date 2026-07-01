@@ -5,6 +5,13 @@
 #pragma kernel UpdateDensities 
 #pragma kernel CalculateExternalForce
 #pragma kernel CalculatePressureForces
+#pragma kernel ComputeAlpha
+#pragma kernel ComputeDivergenceKappa
+#pragma kernel ApplyDivergenceCorrection
+#pragma kernel ComputePredictedDensityKappa
+#pragma kernel ApplyDensityCorrection
+#pragma kernel CopyVelocitiesToDF
+#pragma kernel CopyVelocitiesFromDF
 // #pragma kernel CalculateViscosityForces 
 // #pragma kernel CalculateSurfaceTension 
 #pragma kernel Integrate 
@@ -25,6 +32,12 @@ RWStructuredBuffer<float2> _Densities; // x = density, y = near density (near de
 RWStructuredBuffer<uint> SpatialKeys; 
 RWStructuredBuffer<uint> SortedIndices; 
 RWStructuredBuffer<uint> SpatialOffsets; 
+
+// --- DFSPH divergence-free solver buffers ---
+RWStructuredBuffer<float> _Alphas;              // per-particle factor alpha_i (Eq. 11), recomputed once per sim step
+RWStructuredBuffer<float> _Kappas;              // per-particle stiffness kappa_i, recomputed once per Jacobi iteration
+RWStructuredBuffer<float3> _VelocitiesReadDF;    // Jacobi ping-pong: read buffer for this iteration
+RWStructuredBuffer<float3> _VelocitiesWriteDF;   // Jacobi ping-pong: write buffer for this iteration
 
 RWStructuredBuffer<float3> SortTarget_Positions; 
 RWStructuredBuffer<float3> SortTarget_PredictedPositions; 
@@ -57,6 +70,14 @@ float _InteractionStrength;
 float _ViscosityCoeff; 
 float _SurfaceTensionCoeff; 
 float _SurfaceTensionThreshold; 
+
+// DFSPH divergence-free solver: number of Jacobi iterations is fixed (set from
+// C#) instead of the paper's while-loop + CPU-read average-density-error check,
+// to avoid a GPU->CPU->GPU stall every solver iteration.
+uint _JacobiIterations; 
+
+// fixed iteration count for the constant-density solver, same reasoning as _JacobiIterations
+uint _DensityJacobiIterations; 
 
 // 27 cell offsets for 3D
 static const int3 CellOffsets[27]=
@@ -92,6 +113,20 @@ void ReorderCopyBack(uint3 id : SV_DispatchThreadID)
     _Positions[id.x] = SortTarget_Positions[id.x];
     // _PredictedPositions[id.x] = SortTarget_PredictedPositions[id.x];
     _Velocities[id.x] = SortTarget_Velocities[id.x];
+}
+
+[numthreads(NumThreads, 1, 1)]
+void CopyVelocitiesToDF(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
+    _VelocitiesWriteDF[id.x] = _Velocities[id.x];
+}
+
+[numthreads(NumThreads, 1, 1)]
+void CopyVelocitiesFromDF(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
+    _Velocities[id.x] = _VelocitiesReadDF[id.x];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -271,6 +306,288 @@ void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
 
     velocity += (pressForce / density) * _DeltaTime;
     _Velocities[id.x] = velocity;
+}
+
+// ─────────────────────────────────────────────────────────────
+// DFSPH: Divergence-Free Solver (Bender & Koschier 2017, Sec. 3.2)
+// ─────────────────────────────────────────────────────────────
+
+// Algorithm 1, lines 19-20 (the alpha_i half): computes the per-particle factor
+// alpha_i (Eq. 11) once per simulation step, right after densities are updated.
+// alpha_i only depends on current positions, so it is reused unchanged by every
+// Jacobi iteration of JacobiDivergenceStep below — this is the whole point of
+// factoring it out per the paper (avoids recomputing the neighbour sums per iteration).
+[numthreads(NumThreads, 1, 1)]
+void ComputeAlpha(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
+
+    float3 position = _Positions[id.x].xyz;
+    float density = _Densities[id.x].x;
+
+    float3 sumGradW = float3(0.0, 0.0, 0.0); // sum_j m_j grad(W_ij)
+    float sumSqGradW = 0.0;                   // sum_j |m_j grad(W_ij)|^2
+
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    int3 centreCell = PositionToCellCoord(position, _SmoothingRadius);
+
+    [unroll]
+    for (int n = 0; n < 27; n++)
+    {
+        int3 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell), _ParticleCount);
+        uint start = SpatialOffsets[key];
+
+        if (start == UINT_MAX) continue;
+
+        for (uint j = start; j < _ParticleCount; j++)
+        {
+            uint cellKey = SpatialKeys[j];
+            if (cellKey != key) break;
+            if (j == id.x) continue;
+
+            float3 otherPosition = _Positions[j].xyz;
+            float3 offset = otherPosition - position;
+            float sqrD = dot(offset, offset);
+
+            if (sqrD > sqrH) continue;
+
+            float dst = sqrt(sqrD);
+            float3 dir = (dst > 0.0) ? (offset / dst) : float3(0.0, 1.0, 0.0);
+
+            float3 gradW = _Mass * DFSPH_GradW(dst, dir, _SmoothingRadius);
+            sumGradW += gradW;
+            sumSqGradW += dot(gradW, gradW);
+        }
+    }
+
+    _Alphas[id.x] = DFSPH_FinalizeAlpha(density, sumGradW, sumSqGradW);
+}
+
+// Algorithm 2, line 4: Drho_i/Dt (Eq. 9) from the current v* snapshot, then
+// line 6's kappa_i, written to _Kappas. This is pass 1 of a Jacobi iteration.
+// Split out as its own kernel (rather than fused with the correction pass)
+// so kappa_j is an O(1) buffer read in pass 2 below, instead of a second nested
+// neighbour loop — that fused version is O(N * k^2) per iteration and is not
+// something you want on real particle counts.
+[numthreads(NumThreads, 1, 1)]
+void ComputeDivergenceKappa(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
+
+    float3 position = _Positions[id.x].xyz;
+    float3 velocity_i = _VelocitiesReadDF[id.x];
+    float alpha_i = _Alphas[id.x];
+
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    int3 centreCell = PositionToCellCoord(position, _SmoothingRadius);
+
+    float divergence = 0.0; // Drho_i/Dt
+
+    [unroll]
+    for (int n = 0; n < 27; n++)
+    {
+        int3 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell), _ParticleCount);
+        uint start = SpatialOffsets[key];
+
+        if (start == UINT_MAX) continue;
+
+        for (uint j = start; j < _ParticleCount; j++)
+        {
+            uint cellKey = SpatialKeys[j];
+            if (cellKey != key) break;
+            if (j == id.x) continue;
+
+            float3 otherPosition = _Positions[j].xyz;
+            float3 offset = otherPosition - position;
+            float sqrD = dot(offset, offset);
+
+            if (sqrD > sqrH) continue;
+
+            float dst = sqrt(sqrD);
+            float3 dir = (dst > 0.0) ? (offset / dst) : float3(0.0, 1.0, 0.0);
+            float3 gradW = DFSPH_GradW(dst, dir, _SmoothingRadius);
+
+            float3 velocity_j = _VelocitiesReadDF[j];
+            divergence += _Mass * dot(velocity_i - velocity_j, gradW);
+        }
+    }
+
+    _Kappas[id.x] = (divergence * alpha_i) / _DeltaTime;
+}
+
+
+// Algorithm 3, lines 3-6: predicted density rho*_i (explicit Euler on Eq. 9),
+// then kappa_i = (1/dt^2)(rho*_i - rho0) * alpha_i. Reuses the same alpha_i
+// computed once per step by ComputeAlpha (paper's whole point: alpha_i is
+// shared between both solvers since it only depends on positions).
+[numthreads(NumThreads, 1, 1)]
+void ComputePredictedDensityKappa(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
+
+    float3 position = _Positions[id.x].xyz;
+    float3 velocity_i = _VelocitiesReadDF[id.x];
+    float density_i = _Densities[id.x].x;
+    float alpha_i = _Alphas[id.x];
+
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    int3 centreCell = PositionToCellCoord(position, _SmoothingRadius);
+
+    float drhoDt = 0.0; // Drho_i/Dt (Eq. 9), same form as divergence solver
+
+    [unroll]
+    for (int n = 0; n < 27; n++)
+    {
+        int3 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell), _ParticleCount);
+        uint start = SpatialOffsets[key];
+        if (start == UINT_MAX) continue;
+
+        for (uint j = start; j < _ParticleCount; j++)
+        {
+            uint cellKey = SpatialKeys[j];
+            if (cellKey != key) break;
+            if (j == id.x) continue;
+
+            float3 otherPosition = _Positions[j].xyz;
+            float3 offset = otherPosition - position;
+            float sqrD = dot(offset, offset);
+            if (sqrD > sqrH) continue;
+
+            float dst = sqrt(sqrD);
+            float3 dir = (dst > 0.0) ? (offset / dst) : float3(0.0, 1.0, 0.0);
+            float3 gradW = DFSPH_GradW(dst, dir, _SmoothingRadius);
+
+            float3 velocity_j = _VelocitiesReadDF[j];
+            drhoDt += _Mass * dot(velocity_i - velocity_j, gradW);
+        }
+    }
+
+    // rho*_i = rho_i + dt * Drho_i/Dt  (explicit Euler prediction, Sec 3.3)
+    float predictedDensity = density_i + _DeltaTime * drhoDt;
+
+    // Clamp density error to be non-negative: negative pressure (rho* < rho0)
+    // would pull particles together, which is not physically meaningful for a
+    // free surface and is commonly clamped to 0 in DFSPH implementations.
+    float densityError = predictedDensity - _TargetDensity;
+
+    _Kappas[id.x] = densityError * alpha_i / (_DeltaTime * _DeltaTime);
+}
+
+// Algorithm 3, line 7: same symmetric correction formula as
+// ApplyDivergenceCorrection, but using the constant-density kappa_i from
+// ComputePredictedDensityKappa above instead of the divergence kappa_i.
+[numthreads(NumThreads, 1, 1)]
+void ApplyDensityCorrection(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
+
+    float3 position = _Positions[id.x].xyz;
+    float3 velocity_i = _VelocitiesReadDF[id.x];
+    float density_i = _Densities[id.x].x;
+    float kappa_i = _Kappas[id.x];
+
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    int3 centreCell = PositionToCellCoord(position, _SmoothingRadius);
+
+    float3 deltaV = float3(0.0, 0.0, 0.0);
+
+    [unroll]
+    for (int n = 0; n < 27; n++)
+    {
+        int3 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell), _ParticleCount);
+        uint start = SpatialOffsets[key];
+        if (start == UINT_MAX) continue;
+
+        for (uint j = start; j < _ParticleCount; j++)
+        {
+            uint cellKey = SpatialKeys[j];
+            if (cellKey != key) break;
+            if (j == id.x) continue;
+
+            float3 otherPosition = _Positions[j].xyz;
+            float3 offset = otherPosition - position;
+            float sqrD = dot(offset, offset);
+            if (sqrD > sqrH) continue;
+
+            float dst = sqrt(sqrD);
+            float3 dir = (dst > 0.0) ? (offset / dst) : float3(0.0, 1.0, 0.0);
+            float3 gradW = DFSPH_GradW(dst, dir, _SmoothingRadius);
+
+            float density_j = _Densities[j].x;
+            float kappa_j = _Kappas[j];
+
+            deltaV += _Mass * (kappa_i / density_i + kappa_j / density_j) * gradW;
+        }
+    }
+
+    velocity_i -= _DeltaTime * deltaV;
+    _VelocitiesWriteDF[id.x] = velocity_i;
+}
+
+// Algorithm 2, line 7: apply the symmetric pressure-force velocity correction
+// using kappa_i / kappa_j already computed by ComputeDivergenceKappa above.
+// Reads v* from _VelocitiesReadDF, writes corrected v* to _VelocitiesWriteDF
+// (ping-pong, since this is Jacobi — every particle's update this sweep must
+// be based on the same pre-sweep velocity snapshot, not a partially-updated one).
+//
+// One full Jacobi iteration = ComputeDivergenceKappa + ApplyDivergenceCorrection,
+// dispatched back-to-back. C# calls this pair _JacobiIterations times, swapping
+// which buffer is "read" and which is "write" each time (see PhysicsSystem3D.Simulate).
+// The fixed iteration count replaces the paper's convergence-threshold while-loop,
+// so no CPU readback of the average density-change rate is needed between iterations.
+[numthreads(NumThreads, 1, 1)]
+void ApplyDivergenceCorrection(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
+
+    float3 position = _Positions[id.x].xyz;
+    float3 velocity_i = _VelocitiesReadDF[id.x];
+    float density_i = _Densities[id.x].x;
+    float kappa_i = _Kappas[id.x];
+
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    int3 centreCell = PositionToCellCoord(position, _SmoothingRadius);
+
+    float3 deltaV = float3(0.0, 0.0, 0.0);
+
+    [unroll]
+    for (int n = 0; n < 27; n++)
+    {
+        int3 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell), _ParticleCount);
+        uint start = SpatialOffsets[key];
+
+        if (start == UINT_MAX) continue;
+
+        for (uint j = start; j < _ParticleCount; j++)
+        {
+            uint cellKey = SpatialKeys[j];
+            if (cellKey != key) break;
+            if (j == id.x) continue;
+
+            float3 otherPosition = _Positions[j].xyz;
+            float3 offset = otherPosition - position;
+            float sqrD = dot(offset, offset);
+
+            if (sqrD > sqrH) continue;
+
+            float dst = sqrt(sqrD);
+            float3 dir = (dst > 0.0) ? (offset / dst) : float3(0.0, 1.0, 0.0);
+            float3 gradW = DFSPH_GradW(dst, dir, _SmoothingRadius);
+
+            float density_j = _Densities[j].x;
+            float kappa_j = _Kappas[j];
+
+            deltaV += _Mass * (kappa_i / density_i + kappa_j / density_j) * gradW;
+        }
+    }
+
+    velocity_i -= _DeltaTime * deltaV;
+    _VelocitiesWriteDF[id.x] = velocity_i;
 }
 
 // --- VISCOSITY HELPER ---

@@ -267,4 +267,30 @@ float3 ComputeNearPressureForce(float dst, float3 dir, float nearPressure, float
     return dir * (sharedNearPressure * nearSlope * mass) / safeOtherNearDensity;
 }
 
+// ==============================================================================
+// DFSPH: DIVERGENCE-FREE SOLVER SUPPORT
+// ==============================================================================
+// Implements Bender & Koschier 2017, "Divergence-Free Smoothed Particle
+// Hydrodynamics", Section 3.2. These are pure math helpers; the neighbour-loop
+// kernels that call them live in FluidCompute3D.compute.
+
+// Same gradient kernel used for pressure (spiky, pow2 derivative) so alpha_i is
+// consistent with the force kernel it's paired with. Returns the gradient
+// vector grad(W_ij) = slope * dir.
+float3 DFSPH_GradW(float dst, float3 dir, float radius)
+{
+    float slope = Math_CubicSplineGradient(dst, radius); // dW/dr, already signed correctly
+    return dir * slope;
+}
+
+// Eq. 11: alpha_i = rho_i / ( |sum_j m_j grad(W_ij)|^2 + sum_j |m_j grad(W_ij)|^2 )
+// Caller accumulates sumGradW (vector sum) and sumSqGradW (sum of squared magnitudes)
+// over the neighbour loop, then calls this once to finalize.
+float DFSPH_FinalizeAlpha(float density, float3 sumGradW, float sumSqGradW)
+{
+    float denom = dot(sumGradW, sumGradW) + sumSqGradW;
+    denom = max(denom, 1e-6); // paper: clamp denominator to avoid instability with few neighbours
+    return density / denom;
+}
+
 #endif // FLUID_MATH_HLSL

@@ -108,7 +108,7 @@ public class FluidManager3D : MonoBehaviour
         // Simulation sub-steps
         for (int i = 0; i < iterationsPerFrame; i++)
         {
-            _physicsSystem.Simulate();
+            _physicsSystem.Simulate(settings);
         }
 
         if (!_initialized || boundaryVolume == null) return;

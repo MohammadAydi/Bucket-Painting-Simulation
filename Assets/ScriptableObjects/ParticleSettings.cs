@@ -92,6 +92,11 @@ public class ParticleSettings : ScriptableObject
     // still visibly clump/overlap at high density.
     [Range(0f, 1000f)]
     public float nearPressureMultiplier = 1.0f;
+    
+    [Range(1, 100)]
+    public int jacobiIterations = 10; // Number of Jacobi iterations for pressure solver
+    [Range(1, 100)]
+    public int densityJacobiIterations = 10; // Number of Jacobi iterations for density solver
 
     [Header("Viscosity")]
     // μ — dynamic viscosity. Higher values make the fluid thicker (more honey-like).

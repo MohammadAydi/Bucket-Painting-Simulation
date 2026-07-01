@@ -8,7 +8,8 @@ Shader "Fluid/ParticleCircle3D"
 
     SubShader
     {
-        Tags { "Queue" = "AlphaTest" "RenderType" = "TransparentCutout" }
+        // Changed to Geometry to allow Early-Z culling
+        Tags { "Queue" = "Geometry" "RenderType" = "Opaque" }
         ZWrite On
         Cull Off
 
@@ -20,19 +21,6 @@ Shader "Fluid/ParticleCircle3D"
             #pragma fragment frag
             #include "UnityCG.cginc"
 
-            // ── Particle data layout ─────────────────────────────────────────
-            // struct ParticleData
-            // {
-            //     float4 position;
-            //     float4 predictedPosition;
-            //     float4 velocity;
-            //     float4 force;
-            //     float density;
-            //     float pressure;
-            // };
-            //
-            // StructuredBuffer<ParticleData> _Particles;
-            
             StructuredBuffer<float3> _Position;
             StructuredBuffer<float3> _Velocity;
             Texture2D<float4> _ColourMap;
@@ -41,68 +29,48 @@ Shader "Fluid/ParticleCircle3D"
             float _ParticleRadius;
             float _VelocityMax;
 
-            // ── Structs ──────────────────────────────────────────────────────
             struct appdata
             {
                 float4 vertex : POSITION;
+                float3 normal : NORMAL; // Normal added for cheap shading
             };
 
             struct v2f
             {
                 float4 pos : SV_POSITION;
                 float3 color : TEXCOORD0;
-                float2 uv : TEXCOORD1;
+                float3 normal : NORMAL; 
             };
 
-            // ── Vertex shader ─────────────────────────────────────────────────
             v2f vert(appdata v, uint instanceID : SV_InstanceID)
             {
+                v2f o;
+                o.normal = v.normal; // Pass normal directly to fragment
+
                 float3 position = _Position[instanceID];
                 float3 velocity = _Velocity[instanceID];
 
-                // Our C# mesh vertices go from -1 to 1, exactly what we need
-                float2 quadOffset = v.vertex.xy;
-
-                // Transform particle center to view space
-                float4 viewPos = mul(UNITY_MATRIX_V, float4(position, 1.0));
-                
-                // Add the billboard offset in view space
-                viewPos.xy += quadOffset * _ParticleRadius;
-
-                v2f o;
+                // Billboard offset in view space
+                float3 objectVertPos = v.vertex.xyz * _ParticleRadius;
+                float4 viewPos = mul(UNITY_MATRIX_V, float4(position, 1.0)) + float4(objectVertPos, 0.0);
                 o.pos = mul(UNITY_MATRIX_P, viewPos);
 
-                // Velocity colouring
+                // Move velocity coloring to the vertex shader
                 float speed = length(velocity);
                 float speedT = saturate(speed / max(_VelocityMax, 0.0001));
                 o.color = _ColourMap.SampleLevel(linear_clamp_sampler, float2(speedT, 0.5), 0).rgb;
                 
-                o.uv = quadOffset; 
                 return o;
             }
 
-            // ── Fragment shader ───────────────────────────────────────────────
             fixed4 frag(v2f i) : SV_Target
             {
-                // Circular alpha mask
-                float distSq = dot(i.uv, i.uv);
-                if (distSq > 1.0) 
-                    discard; 
-
-                // Calculate fake Z to reconstruct a spherical normal
-                float z = sqrt(1.0 - distSq);
-                
-                // Construct the normal in view space, then convert to world space
-                float3 viewNormal = float3(i.uv.x, i.uv.y, z);
-                float3 worldNormal = mul((float3x3)UNITY_MATRIX_I_V, viewNormal);
-
-                // Diffuse shading
-                float shading = saturate(dot(_WorldSpaceLightPos0.xyz, normalize(worldNormal)));
+                // Simple, cheap diffuse shading (no discard, no sqrt, no matrix mult)
+                float shading = saturate(dot(_WorldSpaceLightPos0.xyz, normalize(i.normal)));
                 shading = (shading + 0.6) / 1.4;
                 
                 return fixed4(i.color * shading, 1.0);
             }
-
             ENDCG
         }
     }

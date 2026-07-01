@@ -7,7 +7,6 @@ public class FluidManager3D : MonoBehaviour
     [SerializeField] FluidBoundary3D boundaryVolume;
     [SerializeField] ParticleSettings settings;
     [SerializeField] ComputeShader fluidComputeShader;
-    [SerializeField] ComputeShader oneSweepShader;
     [SerializeField] Material particleMaterial;
 
     [Header("Time Step")] public float normalTimeScale = 1;
@@ -48,7 +47,7 @@ public class FluidManager3D : MonoBehaviour
     void Awake()
     {
         if (boundaryVolume == null)
-            boundaryVolume = FindObjectOfType<FluidBoundary3D>();
+            boundaryVolume = FindAnyObjectByType<FluidBoundary3D>();
     }
 
     void Start()
@@ -74,15 +73,15 @@ public class FluidManager3D : MonoBehaviour
     }
 
 
-    void OnValidate()
-    {
-        if (Application.isPlaying) return;
+    // void OnValidate()
+    // {
+    //     if (Application.isPlaying) return;
 
-        if (boundaryVolume == null)
-            boundaryVolume = FindObjectOfType<FluidBoundary3D>();
+    //     if (boundaryVolume == null)
+    //         boundaryVolume = FindObjectOfType<FluidBoundary3D>();
 
-        InitializeSystems();
-    }
+    //     InitializeSystems();
+    // }
 
     void Update()
     {
@@ -114,7 +113,7 @@ public class FluidManager3D : MonoBehaviour
 
         if (!_initialized || boundaryVolume == null) return;
         Bounds bounds = boundaryVolume.WorldBounds;
-        // _renderSystem.Render(_physicsSystem.ParticleCount, bounds);
+        _renderSystem.Render(_physicsSystem.ParticleCount, bounds);
 
     }
 
@@ -127,12 +126,12 @@ public class FluidManager3D : MonoBehaviour
 
     void InitializeSystems()
     {
-        if (settings == null || fluidComputeShader == null || oneSweepShader == null || boundaryVolume == null) return;
+        if (settings == null || fluidComputeShader == null || boundaryVolume == null) return;
 
         DisposeSystems();
 
         _spawnSystem = new SpawnSystem3D(settings);
-        _physicsSystem = new PhysicsSystem3D(fluidComputeShader, oneSweepShader);
+        _physicsSystem = new PhysicsSystem3D(fluidComputeShader);
 
         if (particleMaterial == null)
             particleMaterial = new Material(Shader.Find("Fluid/ParticleCircle3D"));

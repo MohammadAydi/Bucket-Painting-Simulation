@@ -54,13 +54,13 @@ static const uint hashK1 = 15823;
 static const uint hashK2 = 9737333;
 static const uint hashK3 = 440817757;
 
-int3 PositionToCellCoord(float3 pos, float radius) { return int3(floor(pos / radius)); }
+int3 PositionToCellCoord(float3 pos, float radius) { return (int3) (floor(pos / radius)); }
 uint GetKey(uint hash, uint tableSize) { return hash % tableSize; }
 
 uint HashCell(int3 cell)
 {
     const uint blockSize = 50;
-    uint3 ucell = (cell + blockSize / 2);
+    uint3 ucell = (uint3) (cell + blockSize / 2);
     uint3 localCell = ucell % blockSize;
     uint3 blockID = ucell / blockSize;
     uint blockHash = blockID.x * hashK1 + blockID.y * hashK2 + blockID.z * hashK3;

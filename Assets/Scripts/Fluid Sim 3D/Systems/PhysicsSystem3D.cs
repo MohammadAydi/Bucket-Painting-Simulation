@@ -8,8 +8,8 @@ using Fluid_Sim_3D.Utilities.SpatialHash;
 
 public sealed class PhysicsSystem3D : IDisposable
 {
-    const int ThreadsPerGroup = 64;
-    const int ParticleStride = 72; // 4x Vector4 + 2x float
+    const int ThreadsPerGroup = 256;
+    // const int ParticleStride = 72; // 4x Vector4 + 2x float
     // const int SpatialEntryStride = 8; // 2x uint
 
     static readonly int ParticleCountId = Shader.PropertyToID("_ParticleCount");
@@ -70,7 +70,7 @@ public sealed class PhysicsSystem3D : IDisposable
     static readonly int SortTarget_VelocitiesId = Shader.PropertyToID("SortTarget_Velocities");
 
     readonly ComputeShader _compute;
-    readonly ComputeShader _oneSweepShader;
+    // readonly ComputeShader _oneSweepShader;
 
     readonly int _predictPositionsKernel;
     readonly int _buildSpatialLookupKernel;
@@ -111,14 +111,14 @@ public sealed class PhysicsSystem3D : IDisposable
     ComputeBuffer _tempPassHistogram;
 
     ComputeBuffer _tempIndex;
-    OneSweep _sorter;
+    // OneSweep _sorter;
 
     Dictionary<ComputeBuffer, int> bufferNameLookup;
 
-    public PhysicsSystem3D(ComputeShader computeShader, ComputeShader oneSweepShader)
+    public PhysicsSystem3D(ComputeShader computeShader)
     {
         _compute = computeShader;
-        _oneSweepShader = oneSweepShader;
+        // _oneSweepShader = oneSweepShader;
         // _predictPositionsKernel = _compute.FindKernel("PredictPositions");
         _buildSpatialLookupKernel = _compute.FindKernel("BuildSpatialLookup");
         _reorderKernel = _compute.FindKernel("Reorder");
@@ -164,20 +164,19 @@ public sealed class PhysicsSystem3D : IDisposable
         BindAllBuffers();
 
 
-        _sorter =
-        new OneSweep(
-        _oneSweepShader,
-        ParticleCount,
-        ref _tempKeys,
-        ref _tempPayload,
-        ref _tempGlobalHistogram,
-        ref _tempPassHistogram,
-        ref _tempIndex
-        );
+        // _sorter =
+        // new OneSweep(
+        // _oneSweepShader,
+        // ParticleCount,
+        // ref _tempKeys,
+        // ref _tempPayload,
+        // ref _tempGlobalHistogram,
+        // ref _tempPassHistogram,
+        // ref _tempIndex
+        // );
 
         BindStaticUniforms(settings, deltaTime, boundsMin, boundsMax, worldToLocal, localToWorld, interactionPos, interactionStrength);
         SetSmoothingConstant(settings.smoothingRadius);
-        BindAllBuffers();
     }
 
     public void Simulate(
@@ -277,7 +276,7 @@ public sealed class PhysicsSystem3D : IDisposable
 
         _compute.SetFloat(SpikyPow3GradId,
             45f / (Mathf.PI * h6));
-        
+
         _compute.SetFloat(CubicSplineId,
             8f / (Mathf.PI * h3));
     }
@@ -314,10 +313,10 @@ public sealed class PhysicsSystem3D : IDisposable
         SetBuffers(_compute, _buildSpatialLookupKernel, bufferNameLookup, new ComputeBuffer[]
         {
             spatialHash.SpatialKeys,
-            spatialHash.SpatialOffsets,
+            // spatialHash.SpatialOffsets,
             // _predictedPositionsBuffer,
             PositionsBuffer,
-            spatialHash.SpatialIndices,
+            // spatialHash.SpatialIndices,
         });
 
         // Reorder kernel
@@ -341,7 +340,7 @@ public sealed class PhysicsSystem3D : IDisposable
                 // sortTarget_predictedPositionsBuffer,
                 VelocitiesBuffer,
                 sortTarget_velocityBuffer,
-                spatialHash.SpatialIndices
+                // spatialHash.SpatialIndices
         });
 
 
@@ -452,14 +451,30 @@ public sealed class PhysicsSystem3D : IDisposable
 
     private void DisposeBuffers()
     {
-        if (bufferNameLookup == null)
-            return;
+        Release(PositionsBuffer);
+        PositionsBuffer = null;
 
-        foreach (var kvp in bufferNameLookup)
-            Release(kvp.Key);
+        Release(_predictedPositionsBuffer);
+        _predictedPositionsBuffer = null;
+
+        Release(VelocitiesBuffer);
+        VelocitiesBuffer = null;
+
+        Release(_densityBuffer);
+        _densityBuffer = null;
+
+        Release(sortTarget_positionBuffer);
+        sortTarget_positionBuffer = null;
+
+        Release(sortTarget_predictedPositionsBuffer);
+        sortTarget_predictedPositionsBuffer = null;
+
+        Release(sortTarget_velocityBuffer);
+        sortTarget_velocityBuffer = null;
 
         spatialHash?.Release();
         spatialHash = null;
+
         bufferNameLookup = null;
     }
 }

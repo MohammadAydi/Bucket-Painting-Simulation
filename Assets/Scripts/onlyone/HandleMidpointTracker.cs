@@ -2,11 +2,12 @@ using UnityEngine;
 
 namespace onlyone
 {
+    [DefaultExecutionOrder(-10)] 
     public class HandleMidpointTracker : MonoBehaviour
     {
         [Header("المراجع")]
         [SerializeField] private BucketHandleGenerator handleGenerator;
-        [SerializeField] private BucketGenerator bucketGenerator; // ← أضف هذا مباشرة
+        [SerializeField] private BucketGenerator bucketGenerator; 
 
         private void LateUpdate()
         {

@@ -3,8 +3,26 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "ParticleSettings", menuName = "Fluid/Particle Settings")]
 public class ParticleSettings : ScriptableObject
 {
+    // ─────────────────────────────────────────────────────────────────────
+    // Solver modes
+    // ─────────────────────────────────────────────────────────────────────
+    // Each entry here must have a matching #define in FluidMath.hlsl with the
+    // same int value (e.g. PressureSolverMode.NearPressure == 1 must match
+    // #define PRESSURE_MODE_NEAR_PRESSURE 1). The int value of the enum is
+    // sent to the compute shader as-is via Shader.SetInt.
+    //
+    // To add a new pressure solver: add a value here, add the matching
+    // PRESSURE_MODE_XXX define + Compute*PressureForce() function in
+    // FluidMath.hlsl, and a case for it in CalculatePressureForces in
+    // FluidCompute3D.compute. No other C# or shader plumbing changes needed.
+    public enum PressureSolverMode
+    {
+        Standard = 0,
+        NearPressure = 1,
+    }
+
     [Header("Count & Shape")]
-    [Range(1, 10000)]
+    [Range(1, 1000000)]
     public int particleCount = 1000;
     [Range(0.01f, 1f)]
     public float radius = 0.1f;
@@ -57,10 +75,23 @@ public class ParticleSettings : ScriptableObject
     public float gravity = -9.81f;
     [Range(0f, 1f)]
     public float collisionDamping = 0.8f;
-    [Range(0f, 500f)]
+
+    [Header("Pressure Solver")]
+    // Switch between pressure solver implementations to compare behaviour.
+    // Standard: classic SPH pressure only (your original solver).
+    // NearPressure: Standard + an additional near-density/near-pressure term
+    // for stronger short-range repulsion (matches the instructor reference).
+    public PressureSolverMode pressureSolverMode = PressureSolverMode.Standard;
+    [Range(0f, 1000f)]
     public float pressureMultiplier = 2.0f;
-    [Range(0f, 100f)]
+    [Range(0f, 1000f)]
     public float targetDensity = 2.0f;
+    // β — near-pressure multiplier (only used when pressureSolverMode == NearPressure).
+    // Scales the extra short-range repulsion driven by near density. Start small
+    // (around the same order as pressureMultiplier) and increase if particles
+    // still visibly clump/overlap at high density.
+    [Range(0f, 1000f)]
+    public float nearPressureMultiplier = 1.0f;
 
     [Header("Viscosity")]
     // μ — dynamic viscosity. Higher values make the fluid thicker (more honey-like).

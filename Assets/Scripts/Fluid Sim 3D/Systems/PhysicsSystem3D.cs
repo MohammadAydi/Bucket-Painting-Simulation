@@ -1,25 +1,32 @@
 using System;
 using UnityEngine;
+using GPUSorting.Runtime;
+using Unity.Mathematics;
+using static Fluid_Sim_3D.Utilities.ComputeHelper;
+using System.Collections.Generic;
+using Fluid_Sim_3D.Utilities.SpatialHash;
 
 public sealed class PhysicsSystem3D : IDisposable
 {
-    const int ThreadsPerGroup = 64;
-    const int ParticleStride = 72; // 4x Vector4 + 2x float
-    const int SpatialEntryStride = 8; // 2x uint
+    const int ThreadsPerGroup = 256;
+    // const int ParticleStride = 72; // 4x Vector4 + 2x float
+    // const int SpatialEntryStride = 8; // 2x uint
 
     static readonly int ParticleCountId = Shader.PropertyToID("_ParticleCount");
-    static readonly int PaddedCountId = Shader.PropertyToID("_PaddedCount");
-    static readonly int KId = Shader.PropertyToID("_K");
-    static readonly int JId = Shader.PropertyToID("_J");
+    // static readonly int PaddedCountId = Shader.PropertyToID("_PaddedCount");
+    // static readonly int KId = Shader.PropertyToID("_K");
+    // static readonly int JId = Shader.PropertyToID("_J");
     static readonly int DeltaTimeId = Shader.PropertyToID("_DeltaTime");
     static readonly int MassId = Shader.PropertyToID("_Mass");
     static readonly int GravityId = Shader.PropertyToID("_Gravity");
     static readonly int SmoothingRadiusId = Shader.PropertyToID("_SmoothingRadius");
     static readonly int PressureMultiplierId = Shader.PropertyToID("_PressureMultiplier");
     static readonly int TargetDensityId = Shader.PropertyToID("_TargetDensity");
+    static readonly int PressureSolverModeId = Shader.PropertyToID("_PressureSolverMode");
+    static readonly int NearPressureMultiplierId = Shader.PropertyToID("_NearPressureMultiplier");
     static readonly int ParticleRadiusId = Shader.PropertyToID("_ParticleRadius");
     static readonly int CollisionDampingId = Shader.PropertyToID("_CollisionDamping");
-    
+
     static readonly int BoundaryLocalMinId = Shader.PropertyToID("_BoundaryLocalMin");
     static readonly int BoundaryLocalMaxId = Shader.PropertyToID("_BoundaryLocalMax");
     static readonly int BoundaryWorldToLocalId = Shader.PropertyToID("_BoundaryWorldToLocal");
@@ -33,166 +40,441 @@ public sealed class PhysicsSystem3D : IDisposable
     static readonly int SurfaceTensionCoeffId = Shader.PropertyToID("_SurfaceTensionCoeff");
     static readonly int SurfaceTensionThresholdId = Shader.PropertyToID("_SurfaceTensionThreshold");
 
-    static readonly int ParticlesId = Shader.PropertyToID("_Particles");
-    static readonly int SpatialLookupId = Shader.PropertyToID("_SpatialLookup");
-    static readonly int StartIndicesId = Shader.PropertyToID("_StartIndices");
+    static readonly int Poly6Id = Shader.PropertyToID("K_Poly6");
+    static readonly int SpikyGradientId = Shader.PropertyToID("K_SpikyGradient");
+    static readonly int ViscosityLaplacianId = Shader.PropertyToID("K_ViscosityLaplacian");
+    static readonly int Poly6GradientId = Shader.PropertyToID("K_Poly6Gradient");
+    static readonly int Poly6LaplacianId = Shader.PropertyToID("K_Poly6Laplacian");
+    static readonly int CubicSplineId = Shader.PropertyToID("K_CubicSpline");
+
+    static readonly int SpikyPow2Id = Shader.PropertyToID("K_SpikyPow2");
+    static readonly int SpikyPow3Id = Shader.PropertyToID("K_SpikyPow3");
+    static readonly int SpikyPow2GradId = Shader.PropertyToID("K_SpikyPow2Grad");
+    static readonly int SpikyPow3GradId = Shader.PropertyToID("K_SpikyPow3Grad");
+
+
+
+    // static readonly int ParticlesId = Shader.PropertyToID("_Particles");
+    // static readonly int SpatialLookupId = Shader.PropertyToID("_SpatialLookup");
+
+    static readonly int PositionsId = Shader.PropertyToID("_Positions");
+    static readonly int PredictedPositionsId = Shader.PropertyToID("_PredictedPositions");
+    static readonly int VelocitiesId = Shader.PropertyToID("_Velocities");
+    static readonly int DensitiesId = Shader.PropertyToID("_Densities");
+    static readonly int CellKeysId = Shader.PropertyToID("SpatialKeys");
+    static readonly int ParticleIndicesId = Shader.PropertyToID("SortedIndices");
+    static readonly int StartIndicesId = Shader.PropertyToID("SpatialOffsets");
+
+    static readonly int SortTarget_PositionsId = Shader.PropertyToID("SortTarget_Positions");
+    static readonly int SortTarget_PredictedPositionsId = Shader.PropertyToID("SortTarget_PredictedPositions");
+    static readonly int SortTarget_VelocitiesId = Shader.PropertyToID("SortTarget_Velocities");
 
     readonly ComputeShader _compute;
-    
+    // readonly ComputeShader _oneSweepShader;
+
     readonly int _predictPositionsKernel;
     readonly int _buildSpatialLookupKernel;
-    readonly int _clearStartIndicesKernel;
-    readonly int _bitonicSortKernel;
-    readonly int _buildStartIndicesKernel;
+    readonly int _reorderKernel;
+    readonly int _reorderCopybackKernel;
+    // readonly int _clearStartIndicesKernel;
+    // readonly int _bitonicSortKernel;
+    // readonly int _buildStartIndicesKernel;
+    readonly int _calculateExternalForceKernel;
     readonly int _updateDensitiesKernel;
     readonly int _calcPressureKernel;
     readonly int _calcViscosityKernel;
     readonly int _calcSurfaceTensionKernel;
     readonly int _integrateKernel;
 
-    ComputeBuffer _particlesBuffer;
-    ComputeBuffer _spatialLookupBuffer;
-    ComputeBuffer _startIndicesBuffer;
 
-    int _paddedCount;
+    public ComputeBuffer PositionsBuffer;
+    ComputeBuffer _predictedPositionsBuffer;
+    public ComputeBuffer VelocitiesBuffer;
+    ComputeBuffer _densityBuffer;
 
-    public ComputeBuffer ParticleBuffer => _particlesBuffer;
+    SpatialHash spatialHash;
+
+    ComputeBuffer sortTarget_positionBuffer;
+    ComputeBuffer sortTarget_velocityBuffer;
+    ComputeBuffer sortTarget_predictedPositionsBuffer;
+
+    // int _paddedCount;
+
     public int ParticleCount { get; private set; }
+
+
+    ComputeBuffer _tempKeys;
+    ComputeBuffer _tempPayload;
+
+    ComputeBuffer _tempGlobalHistogram;
+
+    ComputeBuffer _tempPassHistogram;
+
+    ComputeBuffer _tempIndex;
+    // OneSweep _sorter;
+
+    Dictionary<ComputeBuffer, int> bufferNameLookup;
 
     public PhysicsSystem3D(ComputeShader computeShader)
     {
         _compute = computeShader;
-        _predictPositionsKernel = _compute.FindKernel("PredictPositions");
+        // _oneSweepShader = oneSweepShader;
+        // _predictPositionsKernel = _compute.FindKernel("PredictPositions");
         _buildSpatialLookupKernel = _compute.FindKernel("BuildSpatialLookup");
-        _clearStartIndicesKernel = _compute.FindKernel("ClearStartIndices");
-        _bitonicSortKernel = _compute.FindKernel("BitonicSort");
-        _buildStartIndicesKernel = _compute.FindKernel("BuildStartIndices");
+        _reorderKernel = _compute.FindKernel("Reorder");
+        _reorderCopybackKernel = _compute.FindKernel("ReorderCopyBack");
+        // _clearStartIndicesKernel = _compute.FindKernel("ClearStartIndices");
+        // _bitonicSortKernel = _compute.FindKernel("BitonicSort");
+        // _buildStartIndicesKernel = _compute.FindKernel("BuildStartIndices");
+        _calculateExternalForceKernel = _compute.FindKernel("CalculateExternalForce");
         _updateDensitiesKernel = _compute.FindKernel("UpdateDensities");
         _calcPressureKernel = _compute.FindKernel("CalculatePressureForces");
-        _calcViscosityKernel = _compute.FindKernel("CalculateViscosityForces");
-        _calcSurfaceTensionKernel = _compute.FindKernel("CalculateSurfaceTension");
+        // _calcViscosityKernel = _compute.FindKernel("CalculateViscosityForces");
+        // _calcSurfaceTensionKernel = _compute.FindKernel("CalculateSurfaceTension");
         _integrateKernel = _compute.FindKernel("Integrate");
     }
 
-    public void Initialize(ParticleSettings settings, ParticleData3D[] particles)
+    public void Initialize(ParticleSettings settings, SpawnData3D spawnData, float deltaTime,
+        Vector3 boundsMin,
+        Vector3 boundsMax,
+        Matrix4x4 worldToLocal,
+        Matrix4x4 localToWorld,
+        Vector3 interactionPos,
+        float interactionStrength)
     {
         DisposeBuffers();
-
-        ParticleCount = particles.Length;
-        if (ParticleCount == 0) return;
-
-        _paddedCount = NextPowerOfTwo(ParticleCount);
-
-        _particlesBuffer = new ComputeBuffer(ParticleCount, ParticleStride, ComputeBufferType.Structured);
-        _particlesBuffer.SetData(particles);
-
-        _spatialLookupBuffer = new ComputeBuffer(_paddedCount, SpatialEntryStride, ComputeBufferType.Structured);
-        _startIndicesBuffer = new ComputeBuffer(_paddedCount, sizeof(uint), ComputeBufferType.Structured);
-
-        BindStaticUniforms(settings);
+        ParticleCount = spawnData.positions.Length;
+        if (ParticleCount == 0)
+            return;
+        CreateBuffers();
+        SetInitialBufferData(spawnData);
+        bufferNameLookup = new Dictionary<ComputeBuffer, int>
+        {
+            { PositionsBuffer, PositionsId },
+            { _predictedPositionsBuffer, PredictedPositionsId },
+            { VelocitiesBuffer, VelocitiesId },
+            { _densityBuffer, DensitiesId },
+            { spatialHash.SpatialKeys, CellKeysId },
+            { spatialHash.SpatialIndices, ParticleIndicesId },
+            { spatialHash.SpatialOffsets, StartIndicesId },
+            { sortTarget_positionBuffer, SortTarget_PositionsId },
+            { sortTarget_predictedPositionsBuffer, SortTarget_PredictedPositionsId },
+            { sortTarget_velocityBuffer, SortTarget_VelocitiesId },
+        };
         BindAllBuffers();
+
+
+        // _sorter =
+        // new OneSweep(
+        // _oneSweepShader,
+        // ParticleCount,
+        // ref _tempKeys,
+        // ref _tempPayload,
+        // ref _tempGlobalHistogram,
+        // ref _tempPassHistogram,
+        // ref _tempIndex
+        // );
+
+        BindStaticUniforms(settings, deltaTime, boundsMin, boundsMax, worldToLocal, localToWorld, interactionPos, interactionStrength);
+        SetSmoothingConstant(settings.smoothingRadius);
     }
 
     public void Simulate(
-        ParticleSettings settings, 
-        float deltaTime, 
-        Vector3 boundsMin, 
-        Vector3 boundsMax, 
-        Matrix4x4 worldToLocal, 
-        Matrix4x4 localToWorld,
-        Vector3 interactionPos, 
-        float interactionStrength)
+      )
     {
-        if (_particlesBuffer == null || ParticleCount == 0) return;
+        if (ParticleCount == 0) return;
 
-        _compute.SetFloat(DeltaTimeId, deltaTime);
-        _compute.SetVector(BoundaryLocalMinId, boundsMin);
-        _compute.SetVector(BoundaryLocalMaxId, boundsMax);
-        _compute.SetMatrix(BoundaryWorldToLocalId, worldToLocal);
-        _compute.SetMatrix(BoundaryLocalToWorldId, localToWorld);
-        
-        _compute.SetVector(InteractionInputPosId, interactionPos);
-        _compute.SetFloat(InteractionStrengthId, interactionStrength);
+
 
         int realGroups = Mathf.CeilToInt(ParticleCount / (float)ThreadsPerGroup);
-        int paddedGroups = Mathf.CeilToInt(_paddedCount / (float)ThreadsPerGroup);
 
-        _compute.Dispatch(_predictPositionsKernel, realGroups, 1, 1);
-        _compute.Dispatch(_buildSpatialLookupKernel, paddedGroups, 1, 1);
-        DispatchBitonicSort(paddedGroups);
-        _compute.Dispatch(_clearStartIndicesKernel, paddedGroups, 1, 1);
-        _compute.Dispatch(_buildStartIndicesKernel, paddedGroups, 1, 1);
+        // _compute.Dispatch(_predictPositionsKernel, realGroups, 1, 1);
+        _compute.Dispatch(_buildSpatialLookupKernel, realGroups, 1, 1);
+        spatialHash.Run();
+        _compute.Dispatch(_reorderKernel, realGroups, 1, 1);
+        _compute.Dispatch(_reorderCopybackKernel, realGroups, 1, 1);
+        // DispatchRadixSort();
+        // DispatchBitonicSort(paddedGroups);
+        // _compute.Dispatch(_clearStartIndicesKernel, realGroups, 1, 1);
+        // _compute.Dispatch(_buildStartIndicesKernel, realGroups, 1, 1);
         _compute.Dispatch(_updateDensitiesKernel, realGroups, 1, 1);
+        _compute.Dispatch(_calculateExternalForceKernel, realGroups, 1, 1);
         _compute.Dispatch(_calcPressureKernel, realGroups, 1, 1);
-        _compute.Dispatch(_calcViscosityKernel, realGroups, 1, 1);
-        _compute.Dispatch(_calcSurfaceTensionKernel, realGroups, 1, 1);
+        // _compute.Dispatch(_calcViscosityKernel, realGroups, 1, 1);
+        // _compute.Dispatch(_calcSurfaceTensionKernel, realGroups, 1, 1);
         _compute.Dispatch(_integrateKernel, realGroups, 1, 1);
     }
 
     public void Dispose() => DisposeBuffers();
 
-    public void BindStaticUniforms(ParticleSettings settings)
+    public void BindStaticUniforms(ParticleSettings settings, float deltaTime,
+        Vector3 boundsMin,
+        Vector3 boundsMax,
+        Matrix4x4 worldToLocal,
+        Matrix4x4 localToWorld,
+        Vector3 interactionPos,
+        float interactionStrength)
     {
         _compute.SetInt(ParticleCountId, ParticleCount);
-        _compute.SetInt(PaddedCountId, _paddedCount);
         _compute.SetFloat(MassId, settings.mass);
         _compute.SetFloat(GravityId, settings.gravity);
         _compute.SetFloat(SmoothingRadiusId, settings.smoothingRadius);
         _compute.SetFloat(PressureMultiplierId, settings.pressureMultiplier);
         _compute.SetFloat(TargetDensityId, settings.targetDensity);
+        _compute.SetInt(PressureSolverModeId, (int)settings.pressureSolverMode);
+        _compute.SetFloat(NearPressureMultiplierId, settings.nearPressureMultiplier);
         _compute.SetFloat(ParticleRadiusId, settings.radius);
         _compute.SetFloat(CollisionDampingId, settings.collisionDamping);
         _compute.SetFloat(InteractionRadiusId, settings.interactionRadius);
         _compute.SetFloat(ViscosityCoeffId, settings.viscosityCoeff);
         _compute.SetFloat(SurfaceTensionCoeffId, settings.surfaceTensionCoeff);
         _compute.SetFloat(SurfaceTensionThresholdId, settings.surfaceTensionThreshold);
+        _compute.SetFloat(DeltaTimeId, deltaTime);
+        _compute.SetVector(BoundaryLocalMinId, boundsMin);
+        _compute.SetVector(BoundaryLocalMaxId, boundsMax);
+        _compute.SetMatrix(BoundaryWorldToLocalId, worldToLocal);
+        _compute.SetMatrix(BoundaryLocalToWorldId, localToWorld);
+
+        _compute.SetVector(InteractionInputPosId, interactionPos);
+        _compute.SetFloat(InteractionStrengthId, interactionStrength);
+    }
+
+    public void SetSmoothingConstant(float h)
+    {
+        float h2 = h * h;
+        float h3 = h2 * h;
+        float h4 = h2 * h2;
+        float h5 = h4 * h;
+        float h6 = h3 * h3;
+        float h9 = h6 * h3;
+
+        // Standard SPH kernels
+        _compute.SetFloat(Poly6Id,
+            315f / (64f * Mathf.PI * h9));
+
+        _compute.SetFloat(SpikyGradientId,
+            -45f / (Mathf.PI * h6));
+
+        _compute.SetFloat(ViscosityLaplacianId,
+            45f / (Mathf.PI * h6));
+
+        _compute.SetFloat(Poly6GradientId,
+            -945f / (32f * Mathf.PI * h9));
+
+        _compute.SetFloat(Poly6LaplacianId,
+            -945f / (32f * Mathf.PI * h9));
+
+        // Custom kernels
+        _compute.SetFloat(SpikyPow2Id,
+            15f / (2f * Mathf.PI * h5));
+
+        _compute.SetFloat(SpikyPow3Id,
+            15f / (Mathf.PI * h6));
+
+        _compute.SetFloat(SpikyPow2GradId,
+            15f / (Mathf.PI * h5));
+
+        _compute.SetFloat(SpikyPow3GradId,
+            45f / (Mathf.PI * h6));
+
+        _compute.SetFloat(CubicSplineId,
+            8f / (Mathf.PI * h3));
+    }
+
+    void SetInitialBufferData(SpawnData3D spawnData)
+    {
+        PositionsBuffer.SetData(spawnData.positions);
+        _predictedPositionsBuffer.SetData(spawnData.positions);
+        VelocitiesBuffer.SetData(spawnData.velocities);
+    }
+
+    void CreateBuffers()
+    {
+        spatialHash = new SpatialHash(ParticleCount);
+        PositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        _predictedPositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        VelocitiesBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        _densityBuffer = CreateStructuredBuffer<float2>(ParticleCount);
+
+        sortTarget_positionBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        sortTarget_predictedPositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        sortTarget_velocityBuffer = CreateStructuredBuffer<float3>(ParticleCount);
     }
 
     void BindAllBuffers()
     {
-        int[] kernels = {
-            _predictPositionsKernel, _buildSpatialLookupKernel, _clearStartIndicesKernel,
-            _bitonicSortKernel, _buildStartIndicesKernel, _updateDensitiesKernel, 
-            _calcPressureKernel, _calcViscosityKernel, _calcSurfaceTensionKernel, _integrateKernel
-        };
 
-        foreach (int k in kernels)
+        // SetBuffers(_compute, _predictPositionsKernel, bufferNameLookup, new ComputeBuffer[]
+        // {
+        //     PositionsBuffer,
+        //     _predictedPositionsBuffer,
+        //     VelocitiesBuffer,
+        // });
+        SetBuffers(_compute, _buildSpatialLookupKernel, bufferNameLookup, new ComputeBuffer[]
         {
-            _compute.SetBuffer(k, ParticlesId, _particlesBuffer);
-            _compute.SetBuffer(k, SpatialLookupId, _spatialLookupBuffer);
-            _compute.SetBuffer(k, StartIndicesId, _startIndicesBuffer);
-        }
-    }
+            spatialHash.SpatialKeys,
+            // spatialHash.SpatialOffsets,
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            // spatialHash.SpatialIndices,
+        });
 
-    void DispatchBitonicSort(int paddedGroups)
-    {
-        for (int k = 2; k <= _paddedCount; k *= 2)
+        // Reorder kernel
+        SetBuffers(_compute, _reorderKernel, bufferNameLookup, new ComputeBuffer[]
         {
-            for (int j = k / 2; j > 0; j /= 2)
-            {
-                _compute.SetInt(KId, k);
-                _compute.SetInt(JId, j);
-                _compute.Dispatch(_bitonicSortKernel, paddedGroups, 1, 1);
-            }
-        }
+                PositionsBuffer,
+                sortTarget_positionBuffer,
+                // _predictedPositionsBuffer,
+                // sortTarget_predictedPositionsBuffer,
+                VelocitiesBuffer,
+                sortTarget_velocityBuffer,
+                spatialHash.SpatialIndices
+        });
+
+        // Reorder copyback kernel
+        SetBuffers(_compute, _reorderCopybackKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+                PositionsBuffer,
+                sortTarget_positionBuffer,
+                // _predictedPositionsBuffer,
+                // sortTarget_predictedPositionsBuffer,
+                VelocitiesBuffer,
+                sortTarget_velocityBuffer,
+                // spatialHash.SpatialIndices
+        });
+
+
+        // SetBuffers(_compute, _clearStartIndicesKernel, bufferNameLookup, new ComputeBuffer[]
+        // {
+        //     _startIndicesBuffer,
+        // });
+
+
+        // SetBuffers(_compute, _buildStartIndicesKernel, bufferNameLookup, new ComputeBuffer[]
+        // {
+        //     _cellKeysBuffer,
+        //     _startIndicesBuffer,
+        // });
+
+        SetBuffers(_compute, _updateDensitiesKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            _densityBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+        });
+
+        // SetBuffers(_compute, _calcViscosityKernel, bufferNameLookup, new ComputeBuffer[]
+        // {
+        //     _predictedPositionsBuffer,
+        //     VelocitiesBuffer,
+        //     _densityBuffer,
+        //     spatialHash.SpatialKeys,
+        //     spatialHash.SpatialOffsets,
+        // });
+        SetBuffers(_compute, _calcPressureKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            VelocitiesBuffer,
+            _densityBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+        });
+
+        SetBuffers(_compute, _calculateExternalForceKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            // _predictedPositionsBuffer,
+            PositionsBuffer,
+            VelocitiesBuffer,
+            _densityBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+        });
+
+        // SetBuffers(_compute, _calcSurfaceTensionKernel, bufferNameLookup, new ComputeBuffer[]
+        // {
+        //     _predictedPositionsBuffer,
+        //     VelocitiesBuffer,
+        //     _densityBuffer,
+        //     spatialHash.SpatialKeys,
+        //     spatialHash.SpatialOffsets,
+        // });
+
+        SetBuffers(_compute, _integrateKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            PositionsBuffer,
+            VelocitiesBuffer,
+        });
     }
 
-    static int NextPowerOfTwo(int n)
-    {
-        int p = 1;
-        while (p < n) p *= 2;
-        return p;
-    }
+    // void DispatchRadixSort()
+    // {
+    //     _sorter.Sort(
+    //  ParticleCount,
 
-    void DisposeBuffers()
+    //  _cellKeysBuffer,
+    //  _particleIndicesBuffer,
+
+    //  _tempKeys,
+    //  _tempPayload,
+    //  _tempGlobalHistogram,
+    //  _tempPassHistogram,
+    //  _tempIndex,
+
+    //  typeof(uint),
+    //  typeof(uint),
+
+    //  true);
+    // }
+
+    // void DispatchBitonicSort(int paddedGroups)
+    // {
+    //     for (int k = 2; k <= _paddedCount; k *= 2)
+    //     {
+    //         for (int j = k / 2; j > 0; j /= 2)
+    //         {
+    //             _compute.SetInt(KId, k);
+    //             _compute.SetInt(JId, j);
+    //             _compute.Dispatch(_bitonicSortKernel, paddedGroups, 1, 1);
+    //         }
+    //     }
+    // }
+
+    // static int NextPowerOfTwo(int n)
+    // {
+    //     int p = 1;
+    //     while (p < n) p *= 2;
+    //     return p;
+    // }
+
+    private void DisposeBuffers()
     {
-        _particlesBuffer?.Release();
-        _particlesBuffer = null;
-        _spatialLookupBuffer?.Release();
-        _spatialLookupBuffer = null;
-        _startIndicesBuffer?.Release();
-        _startIndicesBuffer = null;
-        ParticleCount = 0;
-        _paddedCount = 0;
+        Release(PositionsBuffer);
+        PositionsBuffer = null;
+
+        Release(_predictedPositionsBuffer);
+        _predictedPositionsBuffer = null;
+
+        Release(VelocitiesBuffer);
+        VelocitiesBuffer = null;
+
+        Release(_densityBuffer);
+        _densityBuffer = null;
+
+        Release(sortTarget_positionBuffer);
+        sortTarget_positionBuffer = null;
+
+        Release(sortTarget_predictedPositionsBuffer);
+        sortTarget_predictedPositionsBuffer = null;
+
+        Release(sortTarget_velocityBuffer);
+        sortTarget_velocityBuffer = null;
+
+        spatialHash?.Release();
+        spatialHash = null;
+
+        bufferNameLookup = null;
     }
 }

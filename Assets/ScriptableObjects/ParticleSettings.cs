@@ -23,9 +23,9 @@ public class ParticleSettings : ScriptableObject
 
     [Header("Count & Shape")]
     [Range(1, 1000000)]
-    public int particleCount = 1000;
+    public int particleCount = 400000;
     [Range(0.01f, 1f)]
-    public float radius = 0.1f;
+    public float radius = 0.04f;
     [Range(3, 32)]
     public int segments = 8;
 
@@ -36,7 +36,7 @@ public class ParticleSettings : ScriptableObject
 
     [Header("Appearance")]
     [Range(0.0001f, 10)]
-    public float particleSpacing = 1f;
+    public float particleSpacing = 0.0001f;
     public Color particleColor = new Color(0f, 0f, 0f, 1f);
     public bool useVertexColor = false;
 
@@ -48,9 +48,9 @@ public class ParticleSettings : ScriptableObject
     public bool useSpeedColor = false; // Added toggle variable here
     public Gradient colourMap = DefaultGradient();
     [Range(16, 256)]
-    public int gradientResolution = 128;
+    public int gradientResolution = 64;
     [Range(0.1f, 50f)]
-    public float velocityDisplayMax = 5f;
+    public float velocityDisplayMax = 8f;
 
     [Header("Mouse Interaction Settings")]
     [SerializeField] public float interactionRadius = 3.0f;
@@ -61,7 +61,7 @@ public class ParticleSettings : ScriptableObject
     [Range(0f, 1f)]
     public float smoothness = 1f;
     [Range(0.01f, 4f)]
-    public float smoothingRadius = 1f;
+    public float smoothingRadius = 0.2f;
 
     public Color lowDensityColor = new Color(0.1266f, 0.5330f, 0.6886f, 1f);
     public Color TargetDensityColor = new Color(1f, 1f, 1f, 1f);
@@ -72,42 +72,42 @@ public class ParticleSettings : ScriptableObject
     public float mass = 1f;
 
     [Range(-20f, 20f)]
-    public float gravity = -9.81f;
+    public float gravity = -10f;
     [Range(0f, 1f)]
-    public float collisionDamping = 0.8f;
+    public float collisionDamping = 0.95f;
 
     [Header("Pressure Solver")]
     // Switch between pressure solver implementations to compare behaviour.
     // Standard: classic SPH pressure only (your original solver).
     // NearPressure: Standard + an additional near-density/near-pressure term
     // for stronger short-range repulsion (matches the instructor reference).
-    public PressureSolverMode pressureSolverMode = PressureSolverMode.Standard;
+    public PressureSolverMode pressureSolverMode = PressureSolverMode.NearPressure;
     [Range(0f, 1000f)]
-    public float pressureMultiplier = 2.0f;
+    public float pressureMultiplier = 288f;
     [Range(0f, 1000f)]
-    public float targetDensity = 2.0f;
+    public float targetDensity = 630f;
     // β — near-pressure multiplier (only used when pressureSolverMode == NearPressure).
     // Scales the extra short-range repulsion driven by near density. Start small
     // (around the same order as pressureMultiplier) and increase if particles
     // still visibly clump/overlap at high density.
     [Range(0f, 1000f)]
-    public float nearPressureMultiplier = 1.0f;
+    public float nearPressureMultiplier = 2.15f;
 
     [Header("Viscosity")]
     // μ — dynamic viscosity. Higher values make the fluid thicker (more honey-like).
     // Start around 0.1–0.5 for water-like behaviour; raise to 2–10 for syrup.
     [Range(0f, 1000f)]
-    public float viscosityCoeff = 0.1f;
+    public float viscosityCoeff = 0f;
 
     [Header("Surface Tension")]
     // σ — surface tension coefficient. Controls how strongly the surface minimises
     // its curvature. Start small (0.01–0.1) to avoid numerical blow-up.
     [Range(0f, 100)]
-    public float surfaceTensionCoeff = 0.07f;
+    public float surfaceTensionCoeff = 0.0f;
     // l — surface-normal threshold (Eq. 23). Force is only applied where |∇cₛ| > l,
     // i.e., near an actual surface. Raise this if interior particles fire the kernel.
     [Range(0f, 2f)]
-    public float surfaceTensionThreshold = 0.1f;
+    public float surfaceTensionThreshold = 0.0f;
 
 
     public System.Action OnChanged;

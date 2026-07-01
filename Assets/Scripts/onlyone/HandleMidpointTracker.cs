@@ -7,7 +7,7 @@ namespace onlyone
     {
         [Header("المراجع")]
         [SerializeField] private BucketHandleGenerator handleGenerator;
-        [SerializeField] private BucketGenerator bucketGenerator; // ← أضف هذا مباشرة
+        [SerializeField] private BucketGenerator bucketGenerator; 
 
         private void LateUpdate()
         {

@@ -44,7 +44,7 @@ public class ParticleDepthPass : ScriptableRenderPass, System.IDisposable
         _feature = feature;
 
         // AfterRenderingSkybox avoids the ZBinningJob conflict in Unity 6 URP 17
-        renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
+        renderPassEvent = RenderPassEvent.AfterRenderingOpaques;
 
         if (_mat == null && feature.particleDepthShader)
             _mat = CoreUtils.CreateEngineMaterial(feature.particleDepthShader);

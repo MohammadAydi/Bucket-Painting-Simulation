@@ -15,7 +15,7 @@ public class NormalReconstructPass : ScriptableRenderPass, System.IDisposable
     public void Setup(FluidRendererFeature feature)
     {
         _feature = feature;
-        renderPassEvent = RenderPassEvent.AfterRenderingOpaques+ 3;
+        renderPassEvent = RenderPassEvent.AfterRenderingTransparents+ 3;
 
         if (_mat == null && feature.normalsFromDepthShader)
             _mat = CoreUtils.CreateEngineMaterial(feature.normalsFromDepthShader);

@@ -1,12 +1,13 @@
-// #pragma kernel PredictPositions 
+#pragma kernel PredictPositions 
 #pragma kernel BuildSpatialLookup 
+// #pragma kernel BuildSpatialLookupPredicted
 #pragma kernel Reorder 
 #pragma kernel ReorderCopyBack 
 #pragma kernel UpdateDensities 
-#pragma kernel CalculateExternalForce
+// #pragma kernel CalculateExternalForce
 #pragma kernel CalculatePressureForces
-// #pragma kernel CalculateViscosityForces 
-// #pragma kernel CalculateSurfaceTension 
+#pragma kernel CalculateViscosityForces 
+#pragma kernel CalculateSurfaceTension 
 #pragma kernel Integrate 
 
 #include "UnityCG.cginc" 
@@ -81,7 +82,7 @@ void Reorder(uint3 id : SV_DispatchThreadID)
     if (id.x >= _ParticleCount) return;
     uint sortedIndex = SortedIndices[id.x];
     SortTarget_Positions[id.x] = _Positions[sortedIndex];
-    // SortTarget_PredictedPositions[id.x] = _PredictedPositions[sortedIndex];
+    SortTarget_PredictedPositions[id.x] = _PredictedPositions[sortedIndex];
     SortTarget_Velocities[id.x] = _Velocities[sortedIndex];
 }
 
@@ -90,47 +91,47 @@ void ReorderCopyBack(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= _ParticleCount) return;
     _Positions[id.x] = SortTarget_Positions[id.x];
-    // _PredictedPositions[id.x] = SortTarget_PredictedPositions[id.x];
+    _PredictedPositions[id.x] = SortTarget_PredictedPositions[id.x];
     _Velocities[id.x] = SortTarget_Velocities[id.x];
 }
 
 // ─────────────────────────────────────────────────────────────
 // Physics Kernels
 // ─────────────────────────────────────────────────────────────
-// [numthreads(NumThreads, 1, 1)]
-// void PredictPositions(uint3 id : SV_DispatchThreadID)
-// {
-//     if (id.x >= _ParticleCount) return;
-//     float3 position = _Positions[id.x].xyz;
-//     float3 velocity = _Velocities[id.x].xyz;
+[numthreads(NumThreads, 1, 1)]
+void PredictPositions(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
+    float3 position = _Positions[id.x].xyz;
+    float3 velocity = _Velocities[id.x].xyz;
 
-//     float3 gravityAccel = float3(0.0, _Gravity, 0.0);
+    float3 gravityAccel = float3(0.0, _Gravity, 0.0);
     
-//     if (_InteractionStrength != 0.0)
-//     {
-//         float3 offset = _InteractionInputPos - position;
-//         float sqrDst = dot(offset, offset);
+    if (_InteractionStrength != 0.0)
+    {
+        float3 offset = _InteractionInputPos - position;
+        float sqrDst = dot(offset, offset);
 
-//         if (sqrDst < _InteractionRadius * _InteractionRadius)
-//         {
-//             float dst = sqrt(sqrDst);
-//             float edgeT = dst / _InteractionRadius;
-//             float centreT = 1.0 - edgeT;
+        if (sqrDst < _InteractionRadius * _InteractionRadius)
+        {
+            float dst = sqrt(sqrDst);
+            float edgeT = dst / _InteractionRadius;
+            float centreT = 1.0 - edgeT;
 
-//             float3 dirToInputPoint = offset / dst;
-//             float gravityWeight = 1 - (centreT * saturate(_InteractionStrength / 10));
-//             gravityAccel = gravityAccel * gravityWeight + dirToInputPoint * centreT * _InteractionStrength;
-//             gravityAccel -= velocity * centreT;
-//         }
-//     }
+            float3 dirToInputPoint = offset / dst;
+            float gravityWeight = 1 - (centreT * saturate(_InteractionStrength / 10));
+            gravityAccel = gravityAccel * gravityWeight + dirToInputPoint * centreT * _InteractionStrength;
+            gravityAccel -= velocity * centreT;
+        }
+    }
 
-//     velocity += gravityAccel * _DeltaTime;
-//     const float predictionFactor = 1.0 / 120.0;
-//     float3 predictedPosition = position + velocity * predictionFactor;
+    velocity += gravityAccel * _DeltaTime;
+    const float predictionFactor = 1.0 / 120.0;
+    float3 predictedPosition = position + velocity * predictionFactor;
 
-//     _Velocities[id.x] = float4(velocity, 0.0);
-//     _PredictedPositions[id.x] = float4(predictedPosition, 0.0);
-// }
+    _Velocities[id.x] = velocity;
+    _PredictedPositions[id.x] = predictedPosition;
+}
 
 [numthreads(NumThreads, 1, 1)]
 void BuildSpatialLookup(uint3 id : SV_DispatchThreadID)
@@ -138,18 +139,30 @@ void BuildSpatialLookup(uint3 id : SV_DispatchThreadID)
     if (id.x >= _ParticleCount) return;
     
     uint index = id.x;
-    int3 cell = PositionToCellCoord(_Positions[index], _SmoothingRadius);
+    int3 cell = PositionToCellCoord(_PredictedPositions[index], _SmoothingRadius);
     uint hash = HashCell(cell);
     uint key = GetKey(hash, _ParticleCount);
     SpatialKeys[id.x] = key;
 }
+
+// [numthreads(NumThreads, 1, 1)]
+// void BuildSpatialLookupPredicted(uint3 id : SV_DispatchThreadID)
+// {
+//     if (id.x >= _ParticleCount) return;
+    
+//     uint index = id.x;
+//     int3 cell = PositionToCellCoord(_PredictedPositions[index], _SmoothingRadius);
+//     uint hash = HashCell(cell);
+//     uint key = GetKey(hash, _ParticleCount);
+//     SpatialKeys[id.x] = key;
+// }
 
 [numthreads(NumThreads, 1, 1)]
 void UpdateDensities(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= _ParticleCount) return;
 
-    float3 pos = _Positions[id.x].xyz;
+    float3 pos = _PredictedPositions[id.x].xyz;
     float sqrH = _SmoothingRadius * _SmoothingRadius;
     float density = 0.0;
     float nearDensity = 0.0;
@@ -170,7 +183,7 @@ void UpdateDensities(uint3 id : SV_DispatchThreadID)
             uint cellKey = SpatialKeys[j];
             if (cellKey != key) break;
             
-            float3 other = _Positions[j].xyz;
+            float3 other = _PredictedPositions[j].xyz;
             float3 delta = other - pos;
             float sqrD = dot(delta, delta);
             
@@ -198,7 +211,7 @@ void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= _ParticleCount) return;
     
-    float3 position = _Positions[id.x].xyz;
+    float3 position = _PredictedPositions[id.x].xyz;
     float3 velocity = _Velocities[id.x].xyz;
 
     float2 selfDensities = _Densities[id.x];
@@ -232,7 +245,7 @@ void CalculatePressureForces(uint3 id : SV_DispatchThreadID)
             uint other_idx = j;
             if (other_idx == id.x) continue;
             
-            float3 otherPosition = _Positions[other_idx].xyz;
+            float3 otherPosition = _PredictedPositions[other_idx].xyz;
             float3 offset = otherPosition - position;
             float sqrD = dot(offset, offset);
             
@@ -295,29 +308,94 @@ inline void ComputeSurfaceTensionContribution(float dst, float sqrD, float sqrH,
     colorFieldLaplacian += mOverRho * lapScalar;
 }
 
+// [numthreads(NumThreads, 1, 1)]
+// void CalculateExternalForce(uint3 id : SV_DispatchThreadID)
+// {
+//     if (id.x >= _ParticleCount) return;
+
+//     // 1. Read current state
+//     float3 position = _Positions[id.x].xyz;
+//     float3 velocity = _Velocities[id.x].xyz;
+//     float density = _Densities[id.x].x;
+    
+//     // 2. Base Gravity & Interaction
+//     float3 gravityAccel = float3(0.0, _Gravity, 0.0);
+//     // [Insert your interaction logic here to modify gravityAccel]
+
+//     // 3. Setup Loop Variables
+//     float3 viscForce = float3(0.0, 0.0, 0.0);
+//     float3 colorFieldGradient = float3(0.0, 0.0, 0.0);
+//     float colorFieldLaplacian = 0.0;
+    
+//     float sqrH = _SmoothingRadius * _SmoothingRadius;
+//     int3 centreCell = PositionToCellCoord(position, _SmoothingRadius);
+
+//     // 4. THE MODULAR SINGLE LOOP
+//     [unroll]
+//     for (int n = 0; n < 27; n++)
+//     {
+//         int3 cell = centreCell + CellOffsets[n];
+//         uint key = GetKey(HashCell(cell), _ParticleCount);
+//         uint start = SpatialOffsets[key];
+
+//         if (start == UINT_MAX) continue;
+        
+//         for (uint j = start; j < _ParticleCount; j++)
+//         {
+//             uint cellKey = SpatialKeys[j];
+//             if (cellKey != key) break;
+//             if (j == id.x) continue;
+            
+//             float3 otherPosition = _Positions[j].xyz;
+//             float3 offset = otherPosition - position;
+//             float sqrD = dot(offset, offset);
+            
+//             if (sqrD > sqrH) continue;
+            
+//             float dst = sqrt(sqrD);
+//             float otherDensity = _Densities[j].x;
+//             float3 otherVelocity = _Velocities[j].xyz;
+            
+//             // --- MODULAR PHYSICS CALLS ---
+//             viscForce += ComputeViscosityContribution(dst, _SmoothingRadius, _Mass, velocity, otherVelocity, othe
+//                 rDensity);
+            
+//             ComputeSurfaceTensionContribution(dst, sqrD, sqrH, _SmoothingRadius, _Mass, offset, otherDensity, colorFieldGradient, colorFieldLaplacian);
+//         }
+//     }
+
+//     // 5. Finalize Forces
+//     float3 surfaceForce = float3(0,0,0);
+//     float normalMag = length(colorFieldGradient);
+//     if (normalMag > _SurfaceTensionThreshold)
+//     {
+//         float3 surfaceNormal = colorFieldGradient / normalMag;
+//         surfaceForce = -_SurfaceTensionCoeff * colorFieldLaplacian * surfaceNormal;
+//     }
+
+//     viscForce *= _ViscosityCoeff;
+
+//     // 6. Integrate
+//     float3 totalForceAccel = (viscForce + surfaceForce) / density;
+//     velocity += (gravityAccel + totalForceAccel) * _DeltaTime;
+//     _PredictedPositions[id.x] = position + velocity * _DeltaTime;
+    
+//     _Velocities[id.x] = float4(velocity, 0.0);
+// }
+
 [numthreads(NumThreads, 1, 1)]
-void CalculateExternalForce(uint3 id : SV_DispatchThreadID)
+void CalculateViscosityForces(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= _ParticleCount) return;
-
-    // 1. Read current state
-    float3 position = _Positions[id.x].xyz;
+    
+    float3 position = _PredictedPositions[id.x].xyz;
     float3 velocity = _Velocities[id.x].xyz;
-    float density = _Densities[id.x].x;
-    
-    // 2. Base Gravity & Interaction
-    float3 gravityAccel = float3(0.0, _Gravity, 0.0);
-    // [Insert your interaction logic here to modify gravityAccel]
+    float density =_Densities[id.x].x;
 
-    // 3. Setup Loop Variables
     float3 viscForce = float3(0.0, 0.0, 0.0);
-    float3 colorFieldGradient = float3(0.0, 0.0, 0.0);
-    float colorFieldLaplacian = 0.0;
-    
     float sqrH = _SmoothingRadius * _SmoothingRadius;
     int3 centreCell = PositionToCellCoord(position, _SmoothingRadius);
-
-    // 4. THE MODULAR SINGLE LOOP
+    
     [unroll]
     for (int n = 0; n < 27; n++)
     {
@@ -333,152 +411,89 @@ void CalculateExternalForce(uint3 id : SV_DispatchThreadID)
             if (cellKey != key) break;
             if (j == id.x) continue;
             
-            float3 otherPosition = _Positions[j].xyz;
+            float3 otherPosition = _PredictedPositions[j].xyz;
             float3 offset = otherPosition - position;
             float sqrD = dot(offset, offset);
             
             if (sqrD > sqrH) continue;
             
             float dst = sqrt(sqrD);
-            float otherDensity = _Densities[j].x;
+            
+            // TYPE 1 CALL
+            float laplacian = CalculateViscosityWeight(dst, _SmoothingRadius);
+
             float3 otherVelocity = _Velocities[j].xyz;
-            
-            // --- MODULAR PHYSICS CALLS ---
-            viscForce += ComputeViscosityContribution(dst, _SmoothingRadius, _Mass, velocity, otherVelocity, otherDensity);
-            
-            ComputeSurfaceTensionContribution(dst, sqrD, sqrH, _SmoothingRadius, _Mass, offset, otherDensity, colorFieldGradient, colorFieldLaplacian);
+            float3 velDiff = otherVelocity - velocity;
+            float otherDensity =_Densities[j].x;
+
+            viscForce += _Mass * (velDiff / otherDensity) * laplacian;
         }
     }
 
-    // 5. Finalize Forces
-    float3 surfaceForce = float3(0,0,0);
-    float normalMag = length(colorFieldGradient);
-    if (normalMag > _SurfaceTensionThreshold)
-    {
-        float3 surfaceNormal = colorFieldGradient / normalMag;
-        surfaceForce = -_SurfaceTensionCoeff * colorFieldLaplacian * surfaceNormal;
-    }
-
-    viscForce *= _ViscosityCoeff;
-
-    // 6. Integrate
-    float3 totalForceAccel = (viscForce + surfaceForce) / density;
-    velocity += (gravityAccel + totalForceAccel) * _DeltaTime;
-    
-    _Velocities[id.x] = float4(velocity, 0.0);
+    velocity += (_ViscosityCoeff * viscForce / density) * _DeltaTime;
+    _Velocities[id.x] = velocity;
 }
 
-// [numthreads(NumThreads, 1, 1)]
-// void CalculateViscosityForces(uint3 id : SV_DispatchThreadID)
-// {
-//     if (id.x >= _ParticleCount) return;
+[numthreads(NumThreads, 1, 1)]
+void CalculateSurfaceTension(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ParticleCount) return;
     
-//     float3 position = _PredictedPositions[id.x].xyz;
-//     float3 velocity = _Velocities[id.x].xyz;
-//     float density =_Densities[id.x].x;
+    float3 position = _PredictedPositions[id.x];
+    float3 velocity = _Velocities[id.x];
+    float density =_Densities[id.x].x;
 
-//     float3 viscForce = float3(0.0, 0.0, 0.0);
-//     float sqrH = _SmoothingRadius * _SmoothingRadius;
-//     int3 centreCell = PositionToCellCoord(position, _SmoothingRadius);
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    float h = _SmoothingRadius;
+
+    float3 colorFieldGradient = float3(0.0, 0.0, 0.0);
+    float colorFieldLaplacian = 0.0;
+    int3 centreCell = PositionToCellCoord(position, h);
     
-//     [unroll]
-//     for (int n = 0; n < 27; n++)
-//     {
-//         int3 cell = centreCell + CellOffsets[n];
-//         uint key = GetKey(HashCell(cell), _ParticleCount);
-//         uint start = SpatialOffsets[key];
+    [unroll]
+    for (int n = 0; n < 27; n++)
+    {
+        int3 cell = centreCell + CellOffsets[n];
+        uint key = GetKey(HashCell(cell), _ParticleCount);
+        uint start = SpatialOffsets[key];
 
-//         if (start == UINT_MAX) continue;
+        if (start == UINT_MAX) continue;
         
-//         for (uint j = start; j < _ParticleCount; j++)
-//         {
-//             uint cellKey = SpatialKeys[j];
-//             if (cellKey != key) break;
-//             if (j == id.x) continue;
+        for (uint j = start; j < _ParticleCount; j++)
+        {
+            uint cellKey = SpatialKeys[j];
+            if (cellKey != key) break;
+            if (j == id.x) continue;
             
-//             float3 otherPosition = _PredictedPositions[j].xyz;
-//             float3 offset = otherPosition - position;
-//             float sqrD = dot(offset, offset);
+            float3 otherPosition = _PredictedPositions[j];
+            float3 offset = otherPosition - position;
+            float sqrD = dot(offset, offset);
             
-//             if (sqrD > sqrH) continue;
+            if (sqrD > sqrH) continue;
+            float dst = sqrt(sqrD);
+
+            float otherDensity =_Densities[j].x;
+            float mOverRho = _Mass / otherDensity;
+            float3 dir = (dst > 0.0001) ? (offset / dst) : float3(0.0, 1.0, 0.0);
             
-//             float dst = sqrt(sqrD);
-            
-//             // TYPE 1 CALL
-//             float laplacian = CalculateViscosityWeight(dst, _SmoothingRadius);
+            // TYPE 1 CALLS
+            float gradScalar = CalculateSurfaceTensionGradientWeight(dst, sqrD, sqrH, h);
+            colorFieldGradient += mOverRho * gradScalar * dir;
 
-//             float3 otherVelocity = _Velocities[j].xyz;
-//             float3 velDiff = otherVelocity - velocity;
-//             float otherDensity =_Densities[j].x;
+            float lapScalar = CalculateSurfaceTensionLaplacianWeight(sqrD, sqrH, h);
+            colorFieldLaplacian += mOverRho * lapScalar;
+        }
+    }
 
-//             viscForce += _Mass * (velDiff / otherDensity) * laplacian;
-//         }
-//     }
+    float normalMag = length(colorFieldGradient);
+    if (normalMag <= _SurfaceTensionThreshold) return;
 
-//     velocity += (_ViscosityCoeff * viscForce / density) * _DeltaTime;
-//     _Velocities[id.x] = velocity;
-// }
+    float3 surfaceNormal = colorFieldGradient / normalMag;
+    float3 surfaceForce = -_SurfaceTensionCoeff * colorFieldLaplacian * surfaceNormal;
 
-// [numthreads(NumThreads, 1, 1)]
-// void CalculateSurfaceTension(uint3 id : SV_DispatchThreadID)
-// {
-//     if (id.x >= _ParticleCount) return;
-    
-//     float3 position = _PredictedPositions[id.x];
-//     float3 velocity = _Velocities[id.x];
-//     float density =_Densities[id.x].x;
-
-//     float sqrH = _SmoothingRadius * _SmoothingRadius;
-//     float h = _SmoothingRadius;
-
-//     float3 colorFieldGradient = float3(0.0, 0.0, 0.0);
-//     float colorFieldLaplacian = 0.0;
-//     int3 centreCell = PositionToCellCoord(position, h);
-    
-//     [unroll]
-//     for (int n = 0; n < 27; n++)
-//     {
-//         int3 cell = centreCell + CellOffsets[n];
-//         uint key = GetKey(HashCell(cell), _ParticleCount);
-//         uint start = SpatialOffsets[key];
-
-//         if (start == UINT_MAX) continue;
-        
-//         for (uint j = start; j < _ParticleCount; j++)
-//         {
-//             uint cellKey = SpatialKeys[j];
-//             if (cellKey != key) break;
-//             if (j == id.x) continue;
-            
-//             float3 otherPosition = _PredictedPositions[j];
-//             float3 offset = otherPosition - position;
-//             float sqrD = dot(offset, offset);
-            
-//             if (sqrD > sqrH) continue;
-//             float dst = sqrt(sqrD);
-
-//             float otherDensity =_Densities[j].x;
-//             float mOverRho = _Mass / otherDensity;
-//             float3 dir = (dst > 0.0001) ? (offset / dst) : float3(0.0, 1.0, 0.0);
-            
-//             // TYPE 1 CALLS
-//             float gradScalar = CalculateSurfaceTensionGradientWeight(dst, sqrD, sqrH, h);
-//             colorFieldGradient += mOverRho * gradScalar * dir;
-
-//             float lapScalar = CalculateSurfaceTensionLaplacianWeight(sqrD, sqrH, h);
-//             colorFieldLaplacian += mOverRho * lapScalar;
-//         }
-//     }
-
-//     float normalMag = length(colorFieldGradient);
-//     if (normalMag <= _SurfaceTensionThreshold) return;
-
-//     float3 surfaceNormal = colorFieldGradient / normalMag;
-//     float3 surfaceForce = -_SurfaceTensionCoeff * colorFieldLaplacian * surfaceNormal;
-
-//     velocity += (surfaceForce / density) * _DeltaTime;
-//     _Velocities[id.x] = velocity;
-// }
+    velocity += (surfaceForce / density) * _DeltaTime;
+    _Velocities[id.x] = velocity;
+}
 
 
 

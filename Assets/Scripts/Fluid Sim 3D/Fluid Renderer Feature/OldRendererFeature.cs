@@ -17,7 +17,7 @@
 //      (the passes will find it automatically via FindFirstObjectByType).
 //   3. Assign all shader references in the feature inspector.
 // ──────────────────────────────────────────────────────────────────────────────
-
+/*
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -51,7 +51,7 @@ public class FluidRendererFeature : ScriptableRendererFeature
     [Header("Bilateral Settings")]
     public BilateralFilterSettings bilateralSettings = new BilateralFilterSettings
     {
-        worldRadius        = 0.3f,
+        worldRadius        = 0.13f,
         maxScreenSpaceSize = 40,
         strength           = 0.5f,
         diffStrength       = 20f,
@@ -65,6 +65,14 @@ public class FluidRendererFeature : ScriptableRendererFeature
     public float specularShininess = 64f;
     [Range(0f, 1f)]
     public float reflectionStrength = 0.15f;
+
+    [Header("Lighting Fill")]
+    [Range(0f, 1f)]
+    public float ambientStrength   = 0.25f;
+    public bool  useHalfLambert    = true;
+    [Range(0f, 1f)]
+    public float fillLightStrength = 0.2f;
+    public Color fillLightColor    = new Color(0.4f, 0.35f, 0.3f);
 
     // ── Nested types ──────────────────────────────────────────────────────────
     public enum FluidBlurType { Bilateral1D, Bilateral2D }
@@ -151,3 +159,4 @@ public class FluidRendererFeature : ScriptableRendererFeature
         return ok;
     }
 }
+*/

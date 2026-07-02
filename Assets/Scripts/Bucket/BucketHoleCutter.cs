@@ -7,7 +7,7 @@ public class HoleData
     public string holeName = "Hole Instance";
     public BucketHoleCutter.HoleType type = BucketHoleCutter.HoleType.Circular;
     public BucketHoleCutter.HoleLocation location = BucketHoleCutter.HoleLocation.Side;
-    
+
     public float radius = 0.35f;
     public float width = 0.5f;
     public float height = 0.5f;
@@ -29,7 +29,6 @@ public class BucketHoleCutter : MonoBehaviour
     [Header("List of Holes")]
     public List<HoleData> holes = new List<HoleData>();
 
-    // LIVE AUTOREFRESH TRIGGER
     private void OnValidate()
     {
         BucketGenerator generator = GetComponent<BucketGenerator>();
@@ -54,21 +53,19 @@ public class BucketHoleCutter : MonoBehaviour
                 float angleDelta = Mathf.Abs(faceAngleDeg - hole.angleDegrees);
                 if (angleDelta > 180f) angleDelta = 360f - angleDelta;
 
+                // Unroll the curved wall into a flat plane: X axis = arc length, Y axis = height
+                float faceRadius = Mathf.Lerp(bottomRadius, topRadius, Mathf.Clamp01(faceCenter.y / bucketHeight));
+                float arcDistance = (angleDelta * Mathf.Deg2Rad) * faceRadius;
+                float heightDistance = faceCenter.y - hole.heightPosition;
+
                 if (hole.type == HoleType.Circular)
                 {
-                    float radians = hole.angleDegrees * Mathf.Deg2Rad;
-                    float currentRadius = Mathf.Lerp(bottomRadius, topRadius, hole.heightPosition / bucketHeight);
-                    Vector3 holeCenter = new Vector3(Mathf.Cos(radians) * currentRadius, hole.heightPosition, Mathf.Sin(radians) * currentRadius);
-
-                    if (Vector3.Distance(faceCenter, holeCenter) < hole.radius) return true;
+                    float dist = Mathf.Sqrt(arcDistance * arcDistance + heightDistance * heightDistance);
+                    if (dist < hole.radius) return true;
                 }
                 else if (hole.type == HoleType.Rectangular)
                 {
-                    float averageRadius = (bottomRadius + topRadius) / 2f;
-                    float arcDistanceX = (angleDelta * Mathf.Deg2Rad) * averageRadius;
-                    float localY = Mathf.Abs(faceCenter.y - hole.heightPosition);
-
-                    if (arcDistanceX < (hole.width / 2f) && localY < (hole.height / 2f)) return true;
+                    if (arcDistance < (hole.width / 2f) && Mathf.Abs(heightDistance) < (hole.height / 2f)) return true;
                 }
             }
             else if (hole.location == HoleLocation.Bottom && isFloor)
@@ -76,11 +73,11 @@ public class BucketHoleCutter : MonoBehaviour
                 Vector2 faceCenter2D = new Vector2(faceCenter.x, faceCenter.z);
                 Vector2 holeCenter2D = hole.bottomOffset;
 
-                float dist2D = Vector2.Distance(faceCenter2D, holeCenter2D);
-
-                if (hole.type == HoleType.Circular && dist2D < hole.radius) return true;
-
-                if (hole.type == HoleType.Rectangular)
+                if (hole.type == HoleType.Circular)
+                {
+                    if (Vector2.Distance(faceCenter2D, holeCenter2D) < hole.radius) return true;
+                }
+                else if (hole.type == HoleType.Rectangular)
                 {
                     float localX = Mathf.Abs(faceCenter2D.x - holeCenter2D.x);
                     float localZ = Mathf.Abs(faceCenter2D.y - holeCenter2D.y);

@@ -23,7 +23,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
     public void Setup(FluidRendererFeature feature)
     {
         _feature = feature;
-        renderPassEvent = RenderPassEvent.AfterRenderingTransparents + 4;
+        renderPassEvent = RenderPassEvent.AfterRenderingOpaques+ 4;
 
         if (_mat == null && feature.fluidCompositeShader)
             _mat = CoreUtils.CreateEngineMaterial(feature.fluidCompositeShader);

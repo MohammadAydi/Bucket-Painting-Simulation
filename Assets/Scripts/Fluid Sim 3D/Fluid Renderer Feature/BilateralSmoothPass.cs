@@ -19,7 +19,7 @@ public class BilateralSmoothPass : ScriptableRenderPass, System.IDisposable
     public void Setup(FluidRendererFeature feature)
     {
         _feature = feature;
-        renderPassEvent = RenderPassEvent.AfterRenderingTransparents + 2;
+        renderPassEvent = RenderPassEvent.AfterRenderingOpaques + 2;
 
         if (_mat1D == null && feature.bilateral1DShader)
             _mat1D = CoreUtils.CreateEngineMaterial(feature.bilateral1DShader);

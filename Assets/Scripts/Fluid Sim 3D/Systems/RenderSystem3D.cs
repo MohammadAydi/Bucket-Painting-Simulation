@@ -4,28 +4,28 @@ using UnityEngine.Rendering;
 
 public sealed class RenderSystem3D : IDisposable
 {
-    // ── Shader property IDs ──────────────────────────────────────────────────
     static readonly int PositionId = Shader.PropertyToID("_Position");
     static readonly int VelocityId = Shader.PropertyToID("_Velocity");
     static readonly int ParticleRadiusId = Shader.PropertyToID("_ParticleRadius");
     static readonly int ColourMapId = Shader.PropertyToID("_ColourMap");
     static readonly int VelocityMaxId = Shader.PropertyToID("_VelocityMax");
 
-    // ── State ────────────────────────────────────────────────────────────────
     readonly Material _material;
     readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
 
     Mesh _quadMesh;
     Texture2D _gradientTexture;
+    
+    // Added ComputeBuffer for Indirect Drawing
+    ComputeBuffer _argsBuffer;
+    int _cachedParticleCount = -1;
 
-    // ── Construction ─────────────────────────────────────────────────────────
     public RenderSystem3D(Material material)
     {
         _material = material;
         _material.enableInstancing = true;
     }
 
-    // ── Public API ───────────────────────────────────────────────────────────
     public void Initialize(
      ParticleSettings settings,
      ComputeBuffer positionsBuffer,
@@ -47,20 +47,21 @@ public sealed class RenderSystem3D : IDisposable
         _material.SetTexture(ColourMapId, _gradientTexture);
     }
 
-    /// Issues the procedural draw call. Call every frame from LateUpdate.
     public void Render(int particleCount, Bounds bounds)
     {
         if (particleCount <= 0)
             return;
 
+        UpdateArgsBuffer(particleCount);
 
-        // Switch to DrawProcedural generating 4 vertices per instance (quads)
-        Graphics.DrawMeshInstancedProcedural(
+        // Switched to DrawMeshInstancedIndirect for GPU-driven performance
+        Graphics.DrawMeshInstancedIndirect(
              _quadMesh,
              0,
              _material,
              bounds,
-             particleCount,
+             _argsBuffer,
+             0,
              _propertyBlock,
              ShadowCastingMode.Off,
              receiveShadows: false,
@@ -74,22 +75,58 @@ public sealed class RenderSystem3D : IDisposable
     public void Dispose()
     {
         DestroyGradientTexture();
+        DestroyMesh();
+        ReleaseArgsBuffer();
     }
-    /// Creates a 4-vertex quad spanning from -1 to 1.
+
     void CreateQuadMesh()
     {
         DestroyMesh();
-        _quadMesh = new Mesh { name = "ParticleQuad" };
+        _quadMesh = new Mesh
+        {
+            name = "ParticleQuad",
+            vertices = new Vector3[] {
+                new Vector3(-1, -1, 0),
+                new Vector3( 1, -1, 0),
+                new Vector3(-1,  1, 0),
+                new Vector3( 1,  1, 0)
+            },
 
-        // Vertices from -1 to 1 to match our circular alpha mask math perfectly
-        _quadMesh.vertices = new Vector3[] {
-            new Vector3(-1, -1, 0),
-            new Vector3( 1, -1, 0),
-            new Vector3(-1,  1, 0),
-            new Vector3( 1,  1, 0)
+            // Add back-facing normals so the vertex shader can handle lighting natively
+            normals = new Vector3[] {
+                Vector3.back, Vector3.back, Vector3.back, Vector3.back
+            },
+
+            triangles = new int[] { 0, 2, 1, 2, 3, 1 }
         };
+    }
 
-        _quadMesh.triangles = new int[] { 0, 2, 1, 2, 3, 1 };
+    void UpdateArgsBuffer(int particleCount)
+    {
+        if (_argsBuffer == null)
+        {
+            _argsBuffer = new ComputeBuffer(1, 5 * sizeof(uint), ComputeBufferType.IndirectArguments);
+        }
+
+        if (_cachedParticleCount != particleCount)
+        {
+            _cachedParticleCount = particleCount;
+            uint[] args = new uint[5] {
+                _quadMesh.GetIndexCount(0), // Index count per instance
+                (uint)particleCount,        // Instance count
+                0, 0, 0                     // Start index, base vertex, start instance
+            };
+            _argsBuffer.SetData(args);
+        }
+    }
+
+    void ReleaseArgsBuffer()
+    {
+        if (_argsBuffer != null)
+        {
+            _argsBuffer.Release();
+            _argsBuffer = null;
+        }
     }
 
     void DestroyMesh()
@@ -104,7 +141,6 @@ public sealed class RenderSystem3D : IDisposable
         _quadMesh = null;
     }
 
-    // ── Private helpers ──────────────────────────────────────────────────────
     void BakeGradient(Gradient gradient, int resolution)
     {
         resolution = Mathf.Max(2, resolution);

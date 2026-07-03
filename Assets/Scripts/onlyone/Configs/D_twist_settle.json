@@ -1,0 +1,14 @@
+{
+  "name": "حبل يلتف ويتذبذب حتى يثبت",
+  "description": "نواس التوائي: اضغط T ليُلَفّ الحبل بعدد الفتلات (TwistPulse) ثم يتذبذب جهةً فمعاكسةً حتى يستقر. تخامد ناقص underdamped فتظهر التذبذبات.",
+  "gravity": 9.81, "fixedStep": 0.004, "bucketMass": 3.0, "bucketRadius": 0.13,
+  "airDensity": 1.225, "bucketDragCoefficient": 1.0,
+  "length": 1.2, "startTheta": 60.0, "startPhi": 0.0, "startThetaDot": 0.0, "startPhiDot": 180.0,
+  "pivotFriction": 0.02,
+  "segments": 26, "ropeLength": 1.22, "ropeWidth": 0.01, "linearDensity": 0.1,
+  "constraintIterations": 45, "compliance": 0.00004, "damping": 0.9998, "stretchLimit": 1.1,
+  "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
+  "enableTorsion": true, "torsionalStiffness": 40.0, "torsionalDamping": 0.995,
+  "torsionRadius": 0.02, "torsionIterations": 10, "clampPivotTwist": true,
+  "maxTwistRate": 150.0
+}

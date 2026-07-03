@@ -1,0 +1,14 @@
+{
+  "name": "حبل مرن ينثني",
+  "description": "سَلَك زائد + كثافة أعلى: ينثني بانحناء واضح (catenary) ويتمايل بثقل قبل أن يشدّ، كحبل قنّب سميك.",
+  "gravity": 9.81, "fixedStep": 0.004, "bucketMass": 3.0, "bucketRadius": 0.13,
+  "airDensity": 1.225, "bucketDragCoefficient": 1.0,
+  "length": 1.2, "startTheta": 42.0, "startPhi": 0.0, "startThetaDot": 0.0, "startPhiDot": 180.0,
+  "pivotFriction": 0.02,
+  "segments": 30, "ropeLength": 1.34, "ropeWidth": 0.011, "linearDensity": 0.2,
+  "constraintIterations": 32, "compliance": 0.0018, "damping": 0.99985, "stretchLimit": 1.35,
+  "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
+  "enableTorsion": true, "torsionalStiffness": 35.0, "torsionalDamping": 0.98,
+  "torsionRadius": 0.012, "torsionIterations": 10, "clampPivotTwist": true,
+  "maxTwistRate": 200.0, 
+}

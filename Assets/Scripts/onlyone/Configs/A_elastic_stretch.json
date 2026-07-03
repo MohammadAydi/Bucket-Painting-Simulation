@@ -1,0 +1,14 @@
+{
+  "name": "حبل مطاطي يتغيّر طوله",
+  "description": "مرونة عالية: الدلو الثقيل يمدّ الحبل بوضوح فيزداد الطول الفعّال، ثم يرتدّ ويتذبذب طولياً قبل أن يستقر.",
+  "gravity": 9.81, "fixedStep": 0.004, "bucketMass": 3.0, "bucketRadius": 0.13,
+  "airDensity": 1.225, "bucketDragCoefficient": 1.0,
+  "length": 1.15, "startTheta": 60.0, "startPhi": 0.0, "startThetaDot": 0.0, "startPhiDot": 180.0,
+  "pivotFriction": 0.02,
+  "segments": 26, "ropeLength": 1.15, "ropeWidth": 0.04, "linearDensity": 0.06,
+  "constraintIterations": 28, "compliance": 0.006, "damping": 0.999975, "stretchLimit": 1.7,
+  "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
+  "enableTorsion": true, "torsionalStiffness": 30.0, "torsionalDamping": 0.985,
+  "torsionRadius": 0.01, "torsionIterations": 8, "clampPivotTwist": true,
+  "maxTwistRate": 200.0,
+}

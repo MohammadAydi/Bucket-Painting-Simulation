@@ -26,8 +26,8 @@ MonoBehaviour:
     probeVolumeBlendStatesCS: {fileID: 7200000, guid: b9a23f869c4fd45f19c5ada54dd82176, type: 3}
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
-  - {fileID: 8459581195920944430}
-  m_RendererFeatureMap: ad6b866f10d7b46c2e2d71e346786675
+  - {fileID: 3054750701677462212}
+  m_RendererFeatureMap: ad6b866f10d7b46cc442dc1294a7642a
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
@@ -56,6 +56,25 @@ MonoBehaviour:
   m_DepthTextureFormat: 0
   m_AccurateGbufferNormals: 0
   m_IntermediateTextureMode: 0
+--- !u!114 &3054750701677462212
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: be534d8b8cbf49d8a1c09f56f947d4c4, type: 3}
+  m_Name: FluidRendererFeature
+  m_EditorClassIdentifier: Assembly-CSharp::FluidRendererFeature
+  m_Active: 1
+  particleDepthShader: {fileID: 4800000, guid: 7d70df080a5dbb54bbbddd994e991a52, type: 3}
+  packDepthShader: {fileID: 4800000, guid: c0fcbdc6b06c42bfa84826a1d217330e, type: 3}
+  bilateral1DShader: {fileID: 4800000, guid: d5b464669a232e041aa728e620810ae0, type: 3}
+  bilateral2DShader: {fileID: 4800000, guid: c5319a5f7c2f4bb4fb33ea83ae4415ea, type: 3}
+  normalsFromDepthShader: {fileID: 4800000, guid: 1988bdd80a53d2e4fb12f794fc1aba8d, type: 3}
+  fluidCompositeShader: {fileID: 4800000, guid: e81f46068f6d4a73aa53829d4f77bf16, type: 3}
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -82,34 +101,3 @@ MonoBehaviour:
     BlurQuality: 0
     Falloff: 100
     SampleCount: -1
---- !u!114 &8459581195920944430
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1faccc26ba8795e439b11fc9c3fb0c94, type: 3}
-  m_Name: FluidRendererFeature
-  m_EditorClassIdentifier: Assembly-CSharp::FluidRendererFeature
-  m_Active: 1
-  particleDepthShader: {fileID: 4800000, guid: 7d70df080a5dbb54bbbddd994e991a52, type: 3}
-  packDepthShader: {fileID: 4800000, guid: c0fcbdc6b06c42bfa84826a1d217330e, type: 3}
-  bilateral1DShader: {fileID: 4800000, guid: d5b464669a232e041aa728e620810ae0, type: 3}
-  bilateral2DShader: {fileID: 4800000, guid: c5319a5f7c2f4bb4fb33ea83ae4415ea, type: 3}
-  normalsFromDepthShader: {fileID: 4800000, guid: 1988bdd80a53d2e4fb12f794fc1aba8d, type: 3}
-  fluidCompositeShader: {fileID: 4800000, guid: e81f46068f6d4a73aa53829d4f77bf16, type: 3}
-  depthParticleSize: 0.15
-  blurType: 0
-  bilateralSettings:
-    worldRadius: 0.3
-    maxScreenSpaceSize: 32
-    strength: 1
-    diffStrength: 6
-    iterations: 23
-  paintColor: {r: 0.7735849, g: 0.22236265, b: 0.025542913, a: 1}
-  specularStrength: 0.8
-  specularShininess: 64
-  reflectionStrength: 0.15

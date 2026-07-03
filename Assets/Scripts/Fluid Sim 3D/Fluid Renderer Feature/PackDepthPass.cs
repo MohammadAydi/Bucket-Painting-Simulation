@@ -30,7 +30,7 @@ public class PackDepthPass : ScriptableRenderPass, System.IDisposable
     public void Setup(FluidRendererFeature feature)
     {
         _feature = feature;
-        renderPassEvent = RenderPassEvent.AfterRenderingTransparents + 1;
+        renderPassEvent = RenderPassEvent.AfterRenderingTransparents+ 1;
 
         if (_mat == null && feature.packDepthShader)
             _mat = CoreUtils.CreateEngineMaterial(feature.packDepthShader);

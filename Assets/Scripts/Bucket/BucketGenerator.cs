@@ -30,6 +30,11 @@ public class BucketGenerator : MonoBehaviour
     private MeshFilter meshFilter;
     private Mesh bucketMesh;
 
+    // Surface tags: 0 = side wall, 1 = floor, 2 = divider
+    private const float TAG_WALL = 0f;
+    private const float TAG_FLOOR = 1f;
+    private const float TAG_DIVIDER = 2f;
+
     private void Awake()
     {
         meshFilter = GetComponent<MeshFilter>();
@@ -79,26 +84,19 @@ public class BucketGenerator : MonoBehaviour
         GenerateBucket();
     }
 
-    private void AddDoubleSidedTriangle(List<int> tris, int v1, int v2, int v3)
-    {
-        tris.Add(v1); tris.Add(v2); tris.Add(v3);
-        tris.Add(v1); tris.Add(v3); tris.Add(v2);
-    }
-
     public void GenerateBucket()
     {
         if (meshFilter == null) meshFilter = GetComponent<MeshFilter>();
 
         bucketMesh = new Mesh();
-        bucketMesh.name = "UltimateSolidBucketNoGaps";
+        bucketMesh.name = "Bucket";
 
         List<Vector3> vertices = new List<Vector3>();
+        List<Vector2> surfaceTags = new List<Vector2>();
         List<int> triangles = new List<int>();
 
-        BucketHoleCutter cutter = GetComponent<BucketHoleCutter>();
         int ringVertexCount = segments + 1;
 
-        // 1. GENERATE VERTICES
         for (int h = 0; h <= heightSubdivisions; h++)
         {
             float t = (float)h / heightSubdivisions;
@@ -108,6 +106,7 @@ public class BucketGenerator : MonoBehaviour
             {
                 float angle = (i % segments) * 2 * Mathf.PI / segments;
                 vertices.Add(new Vector3(Mathf.Cos(angle) * currentRadius, currentHeight, Mathf.Sin(angle) * currentRadius));
+                surfaceTags.Add(new Vector2(TAG_WALL, 0f));
             }
         }
 
@@ -123,6 +122,7 @@ public class BucketGenerator : MonoBehaviour
             {
                 float angle = (i % segments) * 2 * Mathf.PI / segments;
                 vertices.Add(new Vector3(Mathf.Cos(angle) * currentRadius, currentHeight, Mathf.Sin(angle) * currentRadius));
+                surfaceTags.Add(new Vector2(TAG_WALL, 0f));
             }
         }
 
@@ -135,6 +135,7 @@ public class BucketGenerator : MonoBehaviour
             {
                 float angle = (i % segments) * 2 * Mathf.PI / segments;
                 vertices.Add(new Vector3(Mathf.Cos(angle) * currentRadius, 0, Mathf.Sin(angle) * currentRadius));
+                surfaceTags.Add(new Vector2(TAG_FLOOR, 0f));
             }
         }
 
@@ -147,19 +148,7 @@ public class BucketGenerator : MonoBehaviour
             {
                 float angle = (i % segments) * 2 * Mathf.PI / segments;
                 vertices.Add(new Vector3(Mathf.Cos(angle) * currentRadius, thickness, Mathf.Sin(angle) * currentRadius));
-            }
-        }
-
-        // 2. GENERATE SIDE WALLS + SIDE RIMS
-        bool[,] sideCutMap = new bool[heightSubdivisions, segments];
-        for (int h = 0; h < heightSubdivisions; h++)
-        {
-            for (int i = 0; i < segments; i++)
-            {
-                int o_b_curr = h * ringVertexCount + i;
-                int o_t_next = (h + 1) * ringVertexCount + (i + 1);
-                Vector3 sideFaceCenter = (vertices[o_b_curr] + vertices[o_t_next]) / 2f;
-                sideCutMap[h, i] = (cutter != null) && cutter.ShouldCutFace(sideFaceCenter, false, thickness, height, bottomRadius, topRadius);
+                surfaceTags.Add(new Vector2(TAG_FLOOR, 0f));
             }
         }
 
@@ -177,60 +166,17 @@ public class BucketGenerator : MonoBehaviour
                 int i_t_curr = innerGridOffset + (h + 1) * ringVertexCount + i;
                 int i_t_next = i_t_curr + 1;
 
-                if (!sideCutMap[h, i])
-                {
-                    triangles.Add(o_b_curr); triangles.Add(o_t_curr); triangles.Add(o_b_next);
-                    triangles.Add(o_b_next); triangles.Add(o_t_curr); triangles.Add(o_t_next);
+                triangles.Add(o_b_curr); triangles.Add(o_t_curr); triangles.Add(o_b_next);
+                triangles.Add(o_b_next); triangles.Add(o_t_curr); triangles.Add(o_t_next);
 
-                    triangles.Add(i_b_curr); triangles.Add(i_b_next); triangles.Add(i_t_curr);
-                    triangles.Add(i_b_next); triangles.Add(i_t_next); triangles.Add(i_t_curr);
-                }
-                else
-                {
-                    if (h == 0 || !sideCutMap[h - 1, i])
-                    {
-                        AddDoubleSidedTriangle(triangles, o_b_curr, o_b_next, i_b_curr);
-                        AddDoubleSidedTriangle(triangles, i_b_curr, o_b_next, i_b_next);
-                    }
-                    if (h == heightSubdivisions - 1 || !sideCutMap[h + 1, i])
-                    {
-                        AddDoubleSidedTriangle(triangles, o_t_curr, i_t_curr, o_t_next);
-                        AddDoubleSidedTriangle(triangles, o_t_next, i_t_curr, i_t_next);
-                    }
-                    
-                    int prevI = (i == 0) ? segments - 1 : i - 1;
-                    if (!sideCutMap[h, prevI])
-                    {
-                        AddDoubleSidedTriangle(triangles, o_b_curr, o_t_curr, i_b_curr);
-                        AddDoubleSidedTriangle(triangles, i_b_curr, o_t_curr, i_t_curr);
-                    }
-                    
-                    int nextI = (i == segments - 1) ? 0 : i + 1;
-                    if (!sideCutMap[h, nextI])
-                    {
-                        AddDoubleSidedTriangle(triangles, o_b_next, i_b_next, o_t_next);
-                        AddDoubleSidedTriangle(triangles, o_t_next, i_b_next, i_t_next);
-                    }
-                }
+                triangles.Add(i_b_curr); triangles.Add(i_b_next); triangles.Add(i_t_curr);
+                triangles.Add(i_b_next); triangles.Add(i_t_next); triangles.Add(i_t_curr);
 
                 if (h == heightSubdivisions - 1)
                 {
-                    AddDoubleSidedTriangle(triangles, o_t_curr, i_t_curr, o_t_next);
-                    AddDoubleSidedTriangle(triangles, o_t_next, i_t_curr, i_t_next);
+                    triangles.Add(o_t_curr); triangles.Add(i_t_curr); triangles.Add(o_t_next);
+                    triangles.Add(o_t_next); triangles.Add(i_t_curr); triangles.Add(i_t_next);
                 }
-            }
-        }
-
-        // 3. GENERATE FLOORS
-        bool[,] floorCutMap = new bool[floorSubdivisions, segments];
-        for (int r = 0; r < floorSubdivisions; r++)
-        {
-            for (int i = 0; i < segments; i++)
-            {
-                int o_f_curr = outerFloorOffset + r * ringVertexCount + i;
-                int o_f_top_next = outerFloorOffset + (r + 1) * ringVertexCount + (i + 1);
-                Vector3 floorCenterPos = (vertices[o_f_curr] + vertices[o_f_top_next]) / 2f;
-                floorCutMap[r, i] = (cutter != null) && cutter.ShouldCutFace(floorCenterPos, true, thickness, height, bottomRadius, topRadius);
             }
         }
 
@@ -248,52 +194,19 @@ public class BucketGenerator : MonoBehaviour
                 int i_f_top_curr = innerFloorOffset + (r + 1) * ringVertexCount + i;
                 int i_f_top_next = i_f_top_curr + 1;
 
-                if (!floorCutMap[r, i])
-                {
-                    triangles.Add(o_f_curr); triangles.Add(o_f_top_curr); triangles.Add(o_f_next);
-                    triangles.Add(o_f_next); triangles.Add(o_f_top_curr); triangles.Add(o_f_top_next);
+                triangles.Add(o_f_curr); triangles.Add(o_f_top_curr); triangles.Add(o_f_next);
+                triangles.Add(o_f_next); triangles.Add(o_f_top_curr); triangles.Add(o_f_top_next);
 
-                    triangles.Add(i_f_curr); triangles.Add(i_f_next); triangles.Add(i_f_top_curr);
-                    triangles.Add(i_f_next); triangles.Add(i_f_top_next); triangles.Add(i_f_top_curr);
-                }
-                else
-                {
-                    if (r == 0 || !floorCutMap[r - 1, i])
-                    {
-                        AddDoubleSidedTriangle(triangles, o_f_curr, o_f_next, i_f_curr);
-                        AddDoubleSidedTriangle(triangles, i_f_curr, o_f_next, i_f_next);
-                    }
-                    if (r == floorSubdivisions - 1 || !floorCutMap[r + 1, i])
-                    {
-                        AddDoubleSidedTriangle(triangles, o_f_top_curr, i_f_top_curr, o_f_top_next);
-                        AddDoubleSidedTriangle(triangles, o_f_top_next, i_f_top_curr, i_f_top_next);
-                    }
-                    int prevI = (i == 0) ? segments - 1 : i - 1;
-                    if (!floorCutMap[r, prevI])
-                    {
-                        AddDoubleSidedTriangle(triangles, o_f_curr, i_f_curr, o_f_top_curr);
-                        AddDoubleSidedTriangle(triangles, o_f_top_curr, i_f_curr, i_f_top_curr);
-                    }
-                    int nextI = (i == segments - 1) ? 0 : i + 1;
-                    if (!floorCutMap[r, nextI])
-                    {
-                        AddDoubleSidedTriangle(triangles, o_f_next, o_f_top_next, i_f_next);
-                        AddDoubleSidedTriangle(triangles, i_f_next, o_f_top_next, i_f_top_next);
-                    }
-                }
+                triangles.Add(i_f_curr); triangles.Add(i_f_next); triangles.Add(i_f_top_curr);
+                triangles.Add(i_f_next); triangles.Add(i_f_top_next); triangles.Add(i_f_top_curr);
             }
         }
 
-        // 4. GENERATE COMPARTMENTS
         if (compartmentRatios != null && compartmentRatios.Count > 1)
         {
             float totalRatioSum = 0;
             foreach (float r in compartmentRatios) totalRatioSum += r;
-
-            if (totalRatioSum <= 0) 
-            {
-                totalRatioSum = 1f; 
-            }
+            if (totalRatioSum <= 0) totalRatioSum = 1f;
 
             float currentAngle = 0f;
             float halfThickness = dividerThickness / 2f;
@@ -316,6 +229,7 @@ public class BucketGenerator : MonoBehaviour
                 int baseIndex = vertices.Count;
                 vertices.Add(c_bottom_left); vertices.Add(c_top_left); vertices.Add(p_bottom_left); vertices.Add(p_top_left);
                 vertices.Add(c_bottom_right); vertices.Add(c_top_right); vertices.Add(p_bottom_right); vertices.Add(p_top_right);
+                for (int k = 0; k < 8; k++) surfaceTags.Add(new Vector2(TAG_DIVIDER, 0f));
 
                 triangles.Add(baseIndex + 0); triangles.Add(baseIndex + 1); triangles.Add(baseIndex + 2);
                 triangles.Add(baseIndex + 2); triangles.Add(baseIndex + 1); triangles.Add(baseIndex + 3);
@@ -332,10 +246,14 @@ public class BucketGenerator : MonoBehaviour
         }
 
         bucketMesh.vertices = vertices.ToArray();
+        bucketMesh.SetUVs(1, surfaceTags);
         bucketMesh.triangles = triangles.ToArray();
         bucketMesh.RecalculateNormals();
         bucketMesh.RecalculateBounds();
 
         meshFilter.mesh = bucketMesh;
+
+        BucketHoleShaderFeeder feeder = GetComponent<BucketHoleShaderFeeder>();
+        if (feeder != null) feeder.UpdateShaderData();
     }
 }

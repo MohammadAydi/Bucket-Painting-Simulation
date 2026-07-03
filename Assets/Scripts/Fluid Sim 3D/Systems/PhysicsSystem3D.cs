@@ -8,8 +8,8 @@ using Fluid_Sim_3D.Utilities.SpatialHash;
 
 public sealed class PhysicsSystem3D : IDisposable
 {
-    const int ThreadsPerGroup = 64;
-    const int ParticleStride = 72; // 4x Vector4 + 2x float
+    const int ThreadsPerGroup = 256;
+    // const int ParticleStride = 72; // 4x Vector4 + 2x float
     // const int SpatialEntryStride = 8; // 2x uint
 
     static readonly int ParticleCountId = Shader.PropertyToID("_ParticleCount");
@@ -70,16 +70,17 @@ public sealed class PhysicsSystem3D : IDisposable
     static readonly int SortTarget_VelocitiesId = Shader.PropertyToID("SortTarget_Velocities");
 
     readonly ComputeShader _compute;
-    readonly ComputeShader _oneSweepShader;
+    // readonly ComputeShader _oneSweepShader;
 
     readonly int _predictPositionsKernel;
     readonly int _buildSpatialLookupKernel;
+    // readonly int _buildSpatialLookupPredictedKernel;
     readonly int _reorderKernel;
     readonly int _reorderCopybackKernel;
     // readonly int _clearStartIndicesKernel;
     // readonly int _bitonicSortKernel;
     // readonly int _buildStartIndicesKernel;
-    readonly int _calculateExternalForceKernel;
+    // readonly int _calculateExternalForceKernel;
     readonly int _updateDensitiesKernel;
     readonly int _calcPressureKernel;
     readonly int _calcViscosityKernel;
@@ -103,34 +104,35 @@ public sealed class PhysicsSystem3D : IDisposable
     public int ParticleCount { get; private set; }
 
 
-    ComputeBuffer _tempKeys;
-    ComputeBuffer _tempPayload;
+    // ComputeBuffer _tempKeys;
+    // ComputeBuffer _tempPayload;
 
-    ComputeBuffer _tempGlobalHistogram;
+    // ComputeBuffer _tempGlobalHistogram;
 
-    ComputeBuffer _tempPassHistogram;
+    // ComputeBuffer _tempPassHistogram;
 
-    ComputeBuffer _tempIndex;
-    OneSweep _sorter;
+    // ComputeBuffer _tempIndex;
+    // OneSweep _sorter;
 
     Dictionary<ComputeBuffer, int> bufferNameLookup;
 
-    public PhysicsSystem3D(ComputeShader computeShader, ComputeShader oneSweepShader)
+    public PhysicsSystem3D(ComputeShader computeShader)
     {
         _compute = computeShader;
-        _oneSweepShader = oneSweepShader;
-        // _predictPositionsKernel = _compute.FindKernel("PredictPositions");
+        // _oneSweepShader = oneSweepShader;
+        _predictPositionsKernel = _compute.FindKernel("PredictPositions");
         _buildSpatialLookupKernel = _compute.FindKernel("BuildSpatialLookup");
+        // _buildSpatialLookupPredictedKernel = _compute.FindKernel("BuildSpatialLookupPredicted");
         _reorderKernel = _compute.FindKernel("Reorder");
         _reorderCopybackKernel = _compute.FindKernel("ReorderCopyBack");
         // _clearStartIndicesKernel = _compute.FindKernel("ClearStartIndices");
         // _bitonicSortKernel = _compute.FindKernel("BitonicSort");
         // _buildStartIndicesKernel = _compute.FindKernel("BuildStartIndices");
-        _calculateExternalForceKernel = _compute.FindKernel("CalculateExternalForce");
+        // _calculateExternalForceKernel = _compute.FindKernel("CalculateExternalForce");
         _updateDensitiesKernel = _compute.FindKernel("UpdateDensities");
         _calcPressureKernel = _compute.FindKernel("CalculatePressureForces");
-        // _calcViscosityKernel = _compute.FindKernel("CalculateViscosityForces");
-        // _calcSurfaceTensionKernel = _compute.FindKernel("CalculateSurfaceTension");
+        _calcViscosityKernel = _compute.FindKernel("CalculateViscosityForces");
+        _calcSurfaceTensionKernel = _compute.FindKernel("CalculateSurfaceTension");
         _integrateKernel = _compute.FindKernel("Integrate");
     }
 
@@ -164,20 +166,19 @@ public sealed class PhysicsSystem3D : IDisposable
         BindAllBuffers();
 
 
-        _sorter =
-        new OneSweep(
-        _oneSweepShader,
-        ParticleCount,
-        ref _tempKeys,
-        ref _tempPayload,
-        ref _tempGlobalHistogram,
-        ref _tempPassHistogram,
-        ref _tempIndex
-        );
+        // _sorter =
+        // new OneSweep(
+        // _oneSweepShader,
+        // ParticleCount,
+        // ref _tempKeys,
+        // ref _tempPayload,
+        // ref _tempGlobalHistogram,
+        // ref _tempPassHistogram,
+        // ref _tempIndex
+        // );
 
         BindStaticUniforms(settings, deltaTime, boundsMin, boundsMax, worldToLocal, localToWorld, interactionPos, interactionStrength);
         SetSmoothingConstant(settings.smoothingRadius);
-        BindAllBuffers();
     }
 
     public void Simulate(
@@ -189,7 +190,7 @@ public sealed class PhysicsSystem3D : IDisposable
 
         int realGroups = Mathf.CeilToInt(ParticleCount / (float)ThreadsPerGroup);
 
-        // _compute.Dispatch(_predictPositionsKernel, realGroups, 1, 1);
+        _compute.Dispatch(_predictPositionsKernel, realGroups, 1, 1);
         _compute.Dispatch(_buildSpatialLookupKernel, realGroups, 1, 1);
         spatialHash.Run();
         _compute.Dispatch(_reorderKernel, realGroups, 1, 1);
@@ -199,10 +200,10 @@ public sealed class PhysicsSystem3D : IDisposable
         // _compute.Dispatch(_clearStartIndicesKernel, realGroups, 1, 1);
         // _compute.Dispatch(_buildStartIndicesKernel, realGroups, 1, 1);
         _compute.Dispatch(_updateDensitiesKernel, realGroups, 1, 1);
-        _compute.Dispatch(_calculateExternalForceKernel, realGroups, 1, 1);
         _compute.Dispatch(_calcPressureKernel, realGroups, 1, 1);
-        // _compute.Dispatch(_calcViscosityKernel, realGroups, 1, 1);
-        // _compute.Dispatch(_calcSurfaceTensionKernel, realGroups, 1, 1);
+        // _compute.Dispatch(_calculateExternalForceKernel, realGroups, 1, 1);
+        _compute.Dispatch(_calcViscosityKernel, realGroups, 1, 1);
+        _compute.Dispatch(_calcSurfaceTensionKernel, realGroups, 1, 1);
         _compute.Dispatch(_integrateKernel, realGroups, 1, 1);
     }
 
@@ -277,7 +278,7 @@ public sealed class PhysicsSystem3D : IDisposable
 
         _compute.SetFloat(SpikyPow3GradId,
             45f / (Mathf.PI * h6));
-        
+
         _compute.SetFloat(CubicSplineId,
             8f / (Mathf.PI * h3));
     }
@@ -305,28 +306,37 @@ public sealed class PhysicsSystem3D : IDisposable
     void BindAllBuffers()
     {
 
-        // SetBuffers(_compute, _predictPositionsKernel, bufferNameLookup, new ComputeBuffer[]
-        // {
-        //     PositionsBuffer,
-        //     _predictedPositionsBuffer,
-        //     VelocitiesBuffer,
-        // });
+        SetBuffers(_compute, _predictPositionsKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            PositionsBuffer,
+            _predictedPositionsBuffer,
+            VelocitiesBuffer,
+        });
         SetBuffers(_compute, _buildSpatialLookupKernel, bufferNameLookup, new ComputeBuffer[]
         {
             spatialHash.SpatialKeys,
-            spatialHash.SpatialOffsets,
+            // spatialHash.SpatialOffsets,
             // _predictedPositionsBuffer,
-            PositionsBuffer,
-            spatialHash.SpatialIndices,
+            _predictedPositionsBuffer,
+            // spatialHash.SpatialIndices,
         });
+
+        // SetBuffers(_compute, _buildSpatialLookupPredictedKernel, bufferNameLookup, new ComputeBuffer[]
+        // {
+        //     spatialHash.SpatialKeys,
+        //     // spatialHash.SpatialOffsets,
+        //     _predictedPositionsBuffer,
+        //     // PositionsBuffer,
+        //     // spatialHash.SpatialIndices,
+        // });
 
         // Reorder kernel
         SetBuffers(_compute, _reorderKernel, bufferNameLookup, new ComputeBuffer[]
         {
                 PositionsBuffer,
                 sortTarget_positionBuffer,
-                // _predictedPositionsBuffer,
-                // sortTarget_predictedPositionsBuffer,
+                _predictedPositionsBuffer,
+                sortTarget_predictedPositionsBuffer,
                 VelocitiesBuffer,
                 sortTarget_velocityBuffer,
                 spatialHash.SpatialIndices
@@ -337,11 +347,11 @@ public sealed class PhysicsSystem3D : IDisposable
         {
                 PositionsBuffer,
                 sortTarget_positionBuffer,
-                // _predictedPositionsBuffer,
-                // sortTarget_predictedPositionsBuffer,
+                _predictedPositionsBuffer,
+                sortTarget_predictedPositionsBuffer,
                 VelocitiesBuffer,
                 sortTarget_velocityBuffer,
-                spatialHash.SpatialIndices
+                // spatialHash.SpatialIndices
         });
 
 
@@ -359,49 +369,49 @@ public sealed class PhysicsSystem3D : IDisposable
 
         SetBuffers(_compute, _updateDensitiesKernel, bufferNameLookup, new ComputeBuffer[]
         {
-            // _predictedPositionsBuffer,
-            PositionsBuffer,
+            _predictedPositionsBuffer,
+            // PositionsBuffer,
             _densityBuffer,
             spatialHash.SpatialKeys,
             spatialHash.SpatialOffsets,
         });
 
-        // SetBuffers(_compute, _calcViscosityKernel, bufferNameLookup, new ComputeBuffer[]
-        // {
-        //     _predictedPositionsBuffer,
-        //     VelocitiesBuffer,
-        //     _densityBuffer,
-        //     spatialHash.SpatialKeys,
-        //     spatialHash.SpatialOffsets,
-        // });
+        SetBuffers(_compute, _calcViscosityKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            _predictedPositionsBuffer,
+            VelocitiesBuffer,
+            _densityBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+        });
         SetBuffers(_compute, _calcPressureKernel, bufferNameLookup, new ComputeBuffer[]
         {
-            // _predictedPositionsBuffer,
-            PositionsBuffer,
+            _predictedPositionsBuffer,
+            // PositionsBuffer,
             VelocitiesBuffer,
             _densityBuffer,
             spatialHash.SpatialKeys,
             spatialHash.SpatialOffsets,
         });
 
-        SetBuffers(_compute, _calculateExternalForceKernel, bufferNameLookup, new ComputeBuffer[]
-        {
-            // _predictedPositionsBuffer,
-            PositionsBuffer,
-            VelocitiesBuffer,
-            _densityBuffer,
-            spatialHash.SpatialKeys,
-            spatialHash.SpatialOffsets,
-        });
-
-        // SetBuffers(_compute, _calcSurfaceTensionKernel, bufferNameLookup, new ComputeBuffer[]
+        // SetBuffers(_compute, _calculateExternalForceKernel, bufferNameLookup, new ComputeBuffer[]
         // {
-        //     _predictedPositionsBuffer,
+        //     // _predictedPositionsBuffer,
+        //     PositionsBuffer,
         //     VelocitiesBuffer,
         //     _densityBuffer,
         //     spatialHash.SpatialKeys,
         //     spatialHash.SpatialOffsets,
         // });
+
+        SetBuffers(_compute, _calcSurfaceTensionKernel, bufferNameLookup, new ComputeBuffer[]
+        {
+            _predictedPositionsBuffer,
+            VelocitiesBuffer,
+            _densityBuffer,
+            spatialHash.SpatialKeys,
+            spatialHash.SpatialOffsets,
+        });
 
         SetBuffers(_compute, _integrateKernel, bufferNameLookup, new ComputeBuffer[]
         {
@@ -452,14 +462,30 @@ public sealed class PhysicsSystem3D : IDisposable
 
     private void DisposeBuffers()
     {
-        if (bufferNameLookup == null)
-            return;
+        Release(PositionsBuffer);
+        PositionsBuffer = null;
 
-        foreach (var kvp in bufferNameLookup)
-            Release(kvp.Key);
+        Release(_predictedPositionsBuffer);
+        _predictedPositionsBuffer = null;
+
+        Release(VelocitiesBuffer);
+        VelocitiesBuffer = null;
+
+        Release(_densityBuffer);
+        _densityBuffer = null;
+
+        Release(sortTarget_positionBuffer);
+        sortTarget_positionBuffer = null;
+
+        Release(sortTarget_predictedPositionsBuffer);
+        sortTarget_predictedPositionsBuffer = null;
+
+        Release(sortTarget_velocityBuffer);
+        sortTarget_velocityBuffer = null;
 
         spatialHash?.Release();
         spatialHash = null;
+
         bufferNameLookup = null;
     }
 }

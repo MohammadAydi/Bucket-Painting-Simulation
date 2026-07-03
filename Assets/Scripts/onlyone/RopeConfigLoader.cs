@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -20,16 +21,18 @@ namespace onlyone
  
         public string[] GetConfigNames()
         {
-            if (configs == null || configs.Count == 0) return new string[0];
+            if (configs == null || configs.Count == 0) return Array.Empty<string>();
             var names = new string[configs.Count];
             for (int i = 0; i < configs.Count; i++)
             {
                 if (!configs[i]) { names[i] = $"{i}: (فارغ)"; continue; }
                 string label = configs[i].name;
-              
+                try
+                {
                     RopeConfig c = JsonUtility.FromJson<RopeConfig>(configs[i].text);
                     if (c != null && !string.IsNullOrEmpty(c.name)) label = c.name;
-                    
+                }
+                catch { /* أبقِ اسم الملف */ }
                 names[i] = $"{i + 1}. {label}";
             }
             return names;
@@ -47,7 +50,7 @@ namespace onlyone
 
             RopeConfig c;
             try { c = JsonUtility.FromJson<RopeConfig>(configs[index].text); }
-            catch (System.Exception e) { Debug.LogError($"[ConfigLoader] فشل قراءة {configs[index].name}: {e.Message}"); return; }
+            catch (Exception e) { Debug.LogError($"[ConfigLoader] فشل قراءة {configs[index].name}: {e.Message}"); return; }
             if (c == null) return;
 
             if (pendulum) pendulum.ApplyConfig(c);

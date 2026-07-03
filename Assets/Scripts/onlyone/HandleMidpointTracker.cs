@@ -4,8 +4,7 @@ namespace onlyone
 {
     [DefaultExecutionOrder(-10)] 
     public class HandleMidpointTracker : MonoBehaviour
-    {
-        [Header("المراجع")]
+    { 
         [SerializeField] private BucketHandleGenerator handleGenerator;
         [SerializeField] private BucketGenerator bucketGenerator; 
 

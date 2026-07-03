@@ -6,11 +6,9 @@ namespace onlyone
     [DisallowMultipleComponent]
     public class SphericalPendulum : MonoBehaviour
     {
-        [Header("Scene References")]
-        [Tooltip("Fixed suspension point. The pendulum hangs from this world position.")]
+        [Header("Scene References")] 
         [SerializeField] private Transform pivot;
-
-        [Tooltip("The bob (ball / bucket). Its position is driven every frame in standalone mode.")]
+ 
         [SerializeField] private Transform bob;
 
         [Header("Suspension (التعليق)")]
@@ -19,9 +17,7 @@ namespace onlyone
 
         [Tooltip("يُطفئه PbdRope تلقائياً عند الاقتران، فيتوقّف النواس عن تحريك الدلو.")]
         public bool driveBucket = true;
-
-        [Tooltip("يُضبط تلقائياً من PbdRope عند الاقتران: يتوقف النواس عن التكامل " +
-                 "ويتلقّى حالته من ديناميكا الحبل (الحبل هو مصدر الحقيقة الوحيد).")]
+ 
         [HideInInspector] public bool externallyDriven = false;
 
         [Header("Motion - initial conditions (الحركة)")]
@@ -56,14 +52,14 @@ namespace onlyone
 
         [Header("Integration")]
         [SerializeField, Min(0.0001f)] private float fixedStep = 0.004f;
- 
+
         private double th, ph, thDot, phDot;
         private double accumulator;
         private double effectiveLength;
 
         private const double MinSin = 1e-3;
         private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
- 
+
         public double Theta           => th;
         public double Phi             => ph;
         public double ThetaDot        => thDot;
@@ -87,13 +83,22 @@ namespace onlyone
             Relaunch();
             RenderPendulum();
         }
-
-        private void OnValidate()
+ 
+        public void ApplyConfig(RopeConfig c)
         {
-            if (pivot == null || bob == null || Application.isPlaying) return;
-            th = startTheta * Mathf.Deg2Rad;
-            ph = startPhi   * Mathf.Deg2Rad;
-            bob.position = pivot.position + SphericalToCartesian(th, ph, length);
+            length        = c.length;
+            startTheta    = c.startTheta;
+            startPhi      = c.startPhi;
+            startThetaDot = c.startThetaDot;
+            startPhiDot   = c.startPhiDot;
+            gravity       = c.gravity;
+            airDensity    = c.airDensity;
+            pivotFriction = c.pivotFriction;
+            mass          = c.bucketMass;          
+            bucketRadius  = c.bucketRadius;         
+            dragCoefficient = c.bucketDragCoefficient;
+            fixedStep     = c.fixedStep;
+            Relaunch();
         }
 
         [ContextMenu("Relaunch (إعادة التجربة)")]
@@ -109,7 +114,7 @@ namespace onlyone
 
         private void Update()
         {
-            if (externallyDriven) return;   
+            if (externallyDriven) return;
 
             accumulator += Time.deltaTime;
             if (accumulator > 0.25) accumulator = 0.25;
@@ -120,7 +125,7 @@ namespace onlyone
             }
             RenderPendulum();
         }
- 
+
         private void Derivatives(
             double thetaIn, double thetaDotIn, double phiDotIn,
             out double dTheta, out double dThetaDot, out double dPhiDot)
@@ -176,7 +181,7 @@ namespace onlyone
 
         private void RenderPendulum()
         {
-            if (!driveBucket) return;   
+            if (!driveBucket) return;
             bob.position = pivot.position + SphericalToCartesian(th, ph, length);
         }
 

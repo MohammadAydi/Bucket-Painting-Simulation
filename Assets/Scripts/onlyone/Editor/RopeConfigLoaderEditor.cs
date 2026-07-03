@@ -29,7 +29,8 @@ namespace onlyone.Editor
             }
 
             using (new EditorGUI.DisabledScope(!Application.isPlaying))
-            { 
+            {
+                if (GUILayout.Button("apply Now in the Run"))
                     loader.Apply(loader.Selected);
             }
 

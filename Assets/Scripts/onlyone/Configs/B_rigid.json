@@ -1,14 +1,23 @@
 {
-  "name": "حبل صلب",
-  "description": "شبه غير قابل للتمدّد ولا الانثناء: كالسلك المشدود. تأرجح نظيف مستوٍ يدوم طويلاً.",
-  "gravity": 9.81, "fixedStep": 0.004, "bucketMass": 3.0, "bucketRadius": 0.13,
+  "name": "حبل صلب (سلك مشدود)",
+  "description": "شبه غير قابل للتمدد (0.3%) ولا الانثناء: كسلك فولاذي. لا سَلَك (ropeLength=length)، تأرجح نظيف طويل الأمد، التواء صلب عالي التردد.",
+  "gravity": 9.81, "fixedStep": 0.004,
+  "bucketMass": 3.0, "bucketRadius": 0.13,
   "airDensity": 1.225, "bucketDragCoefficient": 1.0,
-  "length": 1.2, "startTheta": 60.0, "startPhi": 0.0, "startThetaDot": 0.0, "startPhiDot": 180.0,
-  "pivotFriction": 0.02,
-  "segments": 24, "ropeLength": 1.21, "ropeWidth": 0.03, "linearDensity": 0.08,
-  "constraintIterations": 55, "compliance": 0.00002, "damping": 0.99985, "stretchLimit": 1.03,
+
+  "length": 1.2, "startTheta": 60.0, "startPhi": 0.0,
+  "startThetaDot": 0.0, "startPhiDot": 180.0, "pivotFriction": 0.02,
+
+  "segments": 24, "ropeLength": 1.20, "ropeWidth": 0.006, "linearDensity": 0.08,
+  "substeps": 4, "constraintIterations": 12,
+  "compliance": 0.000005,
+  "internalDampingRate": 0.02,
+  "stretchLimit": 1.02,
+  "enableBending": true, "bendingStiffness": 0.25,
   "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
-  "enableTorsion": true, "torsionalStiffness": 60.0, "torsionalDamping": 0.985,
-  "torsionRadius": 0.01, "torsionIterations": 8, "clampPivotTwist": true,
-  "maxTwistRate": 200.0,
+
+  "enableTorsion": true, "initialTurns": 0.0,
+  "torsionalStiffness": 120.0, "dampingRatio": 0.02,
+  "torsionRadius": 0.003, "torsionIterations": 10,
+  "clampPivotTwist": true, "maxTwistRate": 400.0
 }

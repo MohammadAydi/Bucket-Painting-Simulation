@@ -2,12 +2,7 @@ using System;
 using UnityEngine;
 
 namespace onlyone
-{
-    // الحلّال الوحيد للنظام المقترن. مسؤول عن:
-    // القوى الخارجية على كل عقدة (جاذبية/رياح/سحب)، تكامل Verlet،
-    // قيود XPBD (شد/انحناء/التواء DER)، تحديث المواضع والسرعات،
-    // وحساب الحالة المشتقة (θ,φ,θ̇,φ̇,tension,energy) وإرسالها للنواس كـ RopeState.
-    // المراجع: Bergou 2008 (DER)، Macklin 2016 (XPBD)، Macklin 2019 (substeps).
+{ 
     [DisallowMultipleComponent]
     [RequireComponent(typeof(LineRenderer))]
     public sealed class PbdRope : MonoBehaviour
@@ -84,16 +79,15 @@ namespace onlyone
         private Vector3[] pos, prev, renderPos;
         private float[] invMass, lambda, lambdaBend;
         private float accumulator; private bool ready;
-        private float bucketTension;          // شدّ الدلو (N) من λ آخر قطعة
-        private float lastSubstep;            // آخر خطوة فرعية لحساب السرعات
+        private float bucketTension;         
+        private float lastSubstep;          
 
         private float[]   twist, twistPrev, invInertia, lambdaTw, refTwist;
         private Vector3[] tangent, prevTangent, refDir;
         private float     lastAppliedTwist;
-
-        // مخرجات القراءة (للتشخيص/الواجهة).
+ 
         public float  TensionN     => bucketTension;
-        public double TotalEnergyJ => currentState.TotalEnergy;
+        public double TotalEnergyJ => currentState.totalEnergy;
         private RopeState currentState;
 
         private void Start()
@@ -143,8 +137,7 @@ namespace onlyone
         private void InitializeRope()
         {
             ready = false;
-
-            // ضبط ملكية المحاكاة: الحبل يقود ⇒ النواس مُراقِب.
+ 
             if (pendulum)
             {
                 bool coupled = dynamicBucket;
@@ -215,8 +208,7 @@ namespace onlyone
             lr.widthCurve      = AnimationCurve.Constant(0f, 1f, 1f);
             lr.widthMultiplier = ropeWidth;
         }
-
-        // الإطلاق من الشروط الابتدائية للنواس (المصدر الوحيد لشروط البداية).
+ 
         private void LaunchFromInitialState()
         {
             if (!dynamicBucket || !pendulum)
@@ -260,8 +252,7 @@ namespace onlyone
             tangent     = new Vector3[segments];
             prevTangent = new Vector3[segments];
             refDir      = new Vector3[segments];
-
-            // I_edge = ½ m r² (أسطوانة حول محورها).
+ 
             float mEdge = Mathf.Max(1e-9f, linearDensity * segLen);
             float iedge = 0.5f * mEdge * torsionRadius * torsionRadius;
             for (int i = 0; i < segments; i++) invInertia[i] = 1f / Mathf.Max(1e-12f, iedge);
@@ -283,8 +274,7 @@ namespace onlyone
             for (int i = 1; i < segments; i++)
                 refDir[i] = ParallelTransport(refDir[i - 1], tangent[i - 1], tangent[i]);
             Array.Clear(refTwist, 0, segments);
-
-            // لفّ ابتدائي: dθ/ds ثابت ⇒ توزيع خطي؛ twistPrev=twist ⇒ ω₀=0.
+ 
             if (initialTurns != 0f)
             {
                 float total = initialTurns * 2f * Mathf.PI;
@@ -304,8 +294,7 @@ namespace onlyone
             float alphaStretch = compliance / (dt * dt);
             float alphaBend = (bendingStiffness > 1e-9f)
                             ? (1f / bendingStiffness) / (dt * dt) : 0f;
-
-            // XPBD Alg.1 line 4: تصفير λ بداية كل خطوة.
+ 
             Array.Clear(lambda, 0, segments);
             Array.Clear(lambdaBend, 0, n);
 
@@ -320,8 +309,7 @@ namespace onlyone
                 Vector3 delta = (cur - prev[i]) * retention;
 
                 if (i == n - 1 && dynamicBucket)
-                {
-                    // سحب هواء تربيعي مطبّق كعامل على الإزاحة.
+                { 
                     float a  = Mathf.PI * bucketRadius * bucketRadius;
                     float kd = 0.5f * airDensity * bucketDragCoefficient * a * invMass[i];
                     float f  = Mathf.Min(kd * delta.magnitude, 1f);
@@ -350,12 +338,10 @@ namespace onlyone
 
             ClampStretch();
             PinEndpoints(trackVelocity: false);
-
-            // شدّ الدلو: |λ| للقطعة الأخيرة مقسوماً على dt² (XPBD: القوة = λ·∇C/dt²).
+ 
             bucketTension = Mathf.Abs(lambda[segments - 1]) / (dt * dt);
         }
-
-        // قيد مسافة XPBD مع حدّ تخميد β̃ (Eq.26) على تشوّه القطعة فقط.
+ 
         private void SolveSegment(int idx, float alphaTilde, float betaTilde)
         {
             int a = idx, b = idx + 1;
@@ -374,7 +360,7 @@ namespace onlyone
             {
                 Vector3 dxA = pos[a] - prev[a];
                 Vector3 dxB = pos[b] - prev[b];
-                velTerm = Vector3.Dot(nHat, dxB - dxA);   // ∇C·Δx
+                velTerm = Vector3.Dot(nHat, dxB - dxA);   
             }
 
             float gamma = alphaTilde * betaTilde;
@@ -385,8 +371,7 @@ namespace onlyone
             pos[a] -= nHat * (invMass[a] * dL);
             pos[b] += nHat * (invMass[b] * dL);
         }
-
-        // قيد انحناء DER: C=φ (زاوية الانعطاف)، rest=0. ‖κb‖=2tan(φ/2)=φ+O(φ³).
+ 
         private void SolveBend(int i, float alphaTilde)
         {
             Vector3 ea = pos[i] - pos[i - 1];
@@ -427,8 +412,7 @@ namespace onlyone
                 Vector3 e = pos[i + 1] - pos[i];
                 tangent[i] = e.sqrMagnitude > 1e-14f ? e.normalized : tangent[i];
             }
-
-            // نقل زمني للإطار المرجعي (Bergou §4.2.2).
+ 
             for (int i = 0; i < segments; i++)
             {
                 Vector3 d = ParallelTransport(refDir[i], prevTangent[i], tangent[i]);
@@ -436,15 +420,13 @@ namespace onlyone
                 refDir[i] = d.sqrMagnitude > 1e-10f ? d.normalized : OrthoSeed(tangent[i]);
                 prevTangent[i] = tangent[i];
             }
-
-            // Reference twist بين الحواف (تبادل Twist↔Writhe).
+ 
             for (int j = 1; j < segments; j++)
             {
                 Vector3 spaceT = ParallelTransport(refDir[j - 1], tangent[j - 1], tangent[j]);
                 refTwist[j] = SignedAngle(spaceT, refDir[j], tangent[j]);
             }
-
-            // تكامل Verlet زاوي بتخميد رايلي موحّد ζ.
+ 
             for (int i = 0; i < segments; i++)
             {
                 if (invInertia[i] < 1e-12f) { twistPrev[i] = twist[i]; continue; }
@@ -460,8 +442,7 @@ namespace onlyone
             }
 
             if (clampPivotTwist) twist[0] = 0f;
-
-            // قيود XPBD توائية: C_j = θ_{j+1} − θ_j + refTwist_{j+1}.
+ 
             float alphaTw = (torsionalStiffness > 1e-9f)
                           ? (1f / torsionalStiffness) / (dt * dt) : 0f;
             Array.Clear(lambdaTw, 0, lambdaTw.Length);
@@ -520,8 +501,7 @@ namespace onlyone
             if (!dynamicBucket)
                 pos[n - 1] = bobOverride ? bobOverride.position : bob.position;
         }
-
-        // يحسب الحالة المشتقة من حالة الحبل الحقيقية ويرسلها للمُراقِب كـ RopeState.
+ 
         private void PublishState(float dt)
         {
             Vector3 r = pos[n - 1] - pos[0];
@@ -549,8 +529,7 @@ namespace onlyone
                                          lEff, bucketTension, ke, pe, elastic);
             pendulum.PushState(currentState);
         }
-
-        // طاقة النظام (الحبل يملك كل العقد والسرعات ⇒ هو الوحيد القادر على حسابها).
+ 
         private void ComputeEnergy(float dt, out double ke, out double pe, out double elastic)
         {
             ke = 0; pe = 0;
@@ -562,10 +541,9 @@ namespace onlyone
                 float mi = (i == n - 1 && dynamicBucket) ? bucketMass : mEdge;
                 Vector3 vel = (pos[i] - prev[i]) / dt;
                 ke += 0.5 * mi * vel.sqrMagnitude;
-                pe += mi * gravity * (pos[i].y - pivotPos.y);   // مرجع الجهد: المحور
+                pe += mi * gravity * (pos[i].y - pivotPos.y);   
             }
-
-            // طاقة مرنة: شد Σ½k_s·C² + انحناء Σ½k_b·φ² + التواء Σ½k_t·m² (Bergou Eq.1-2).
+ 
             double eStretch = 0, eBend = 0, eTwist = 0;
             float ks = compliance > 1e-12f ? 1f / compliance : 0f;
             for (int i = 0; i < segments; i++)

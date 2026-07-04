@@ -53,14 +53,14 @@ namespace onlyone
         public double Phi             => ph;
         public double ThetaDot        => thDot;
         public double PhiDot          => phDot;
-        public double EffectiveLength => state.EffLength > 0 ? state.EffLength : length;
+        public double EffectiveLength => state.effLength > 0 ? state.effLength : length;
         public float  Mass            => mass;
  
-        public double Tension         => state.Tension;
-        public double KineticEnergy   => state.KineticEnergy;
-        public double PotentialEnergy => state.PotentialEnergy;
-        public double ElasticEnergy   => state.ElasticEnergy;
-        public double TotalEnergy     => state.TotalEnergy;
+        public double Tension         => state.tension;
+        public double KineticEnergy   => state.kineticEnergy;
+        public double PotentialEnergy => state.potentialEnergy;
+        public double ElasticEnergy   => state.elasticEnergy;
+        public double TotalEnergy     => state.totalEnergy;
 
         public float StartThetaRad    => startTheta    * Mathf.Deg2Rad;
         public float StartPhiRad      => startPhi      * Mathf.Deg2Rad;
@@ -110,7 +110,7 @@ namespace onlyone
         public void PushState(in RopeState s)
         {
             state = s;
-            th = s.Theta; ph = s.Phi; thDot = s.ThetaDot; phDot = s.PhiDot;
+            th = s.theta; ph = s.phi; thDot = s.thetaDot; phDot = s.phiDot;
         }
  
         public void SetStateFromWorld(double theta, double phi,

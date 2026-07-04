@@ -1,23 +1,21 @@
 {
-  "name": "نواس توائي DER — ٨ لفات، انحناء، تخامد ناقص",
-  "description": "لفّ ابتدائي 8 لفات بطاقة كامنة؛ فكّ، تجاوز، انعكاس، استقرار. Reference twist + نقل زمني (Bergou §4.2.2)، انحناء DER، substepping (Macklin 2019). ζ=0.10.",
+  "name": "نايلون ملفوف يخزّن طاقة توائية",
   "gravity": 9.81, "fixedStep": 0.004,
   "bucketMass": 3.0, "bucketRadius": 0.13,
   "airDensity": 1.225, "bucketDragCoefficient": 1.0,
-
-  "length": 1.2, "startTheta": 60.0, "startPhi": 0.0,
-  "startThetaDot": 0.0, "startPhiDot": 120.0, "pivotFriction": 0.02,
-
-  "segments": 26, "ropeLength": 1.22, "ropeWidth": 0.01, "linearDensity": 0.1,
-  "substeps": 4, "constraintIterations": 8,
-  "compliance": 0.00004,
-  "internalDampingRate": 0.05,
-  "stretchLimit": 1.1,
-  "enableBending": true, "bendingStiffness": 0.02, 
-  "wind": { "x": 0, "y": 0, "z": 0 }, "dynamicBucket": true,
-
+  "length": 1.2, "startTheta": 20.0, "startPhi": 0.0,
+  "startThetaDot": 0.0, "startPhiDot": 0.0, "pivotFriction": 0.02,
+  "segments": 26, "ropeLength": 1.22, "ropeWidth": 0.01,
+  "linearDensity": 0.0895,
+  "substeps": 6, "constraintIterations": 10,
+  "compliance": 0.000003983,
+  "internalDampingRate": 0.04,
+  "stretchDampingBeta": 0.015,
+  "stretchLimit": 1.10,
+  "enableBending": true, "bendingStiffness": 0.0471,
+  "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
   "enableTorsion": true, "initialTurns": 10.0,
-  "torsionalStiffness": 25.0, "dampingRatio": 0.05,
-  "torsionRadius": 0.015, "torsionIterations": 8,
-  "clampPivotTwist": true, "maxTwistRate": 800.0
+  "torsionalStiffness": 0.903, "dampingRatio": 0.03,
+  "torsionRadius": 0.005, "torsionIterations": 12,
+  "clampPivotTwist": true, "maxTwistRate": 500.0
 }

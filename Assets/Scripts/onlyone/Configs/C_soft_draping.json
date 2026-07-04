@@ -1,23 +1,21 @@
 {
-  "name": "حبل قنّب ينثني بلا استطالة",
-  "description": "سَلَك 14سم + كثافة عالية: يتهدل بقوس catenary واضح، يتمايل بثقل، يشدّ عند أقصى التأرجح ثم يرتخي. استطالة 1.3% فقط (واقع القنب) واحتكاك ألياف داخلي ملموس.",
+  "name": "قطن مجدول مرن ينثني",
   "gravity": 9.81, "fixedStep": 0.004,
   "bucketMass": 3.0, "bucketRadius": 0.13,
   "airDensity": 1.225, "bucketDragCoefficient": 1.0,
-
   "length": 1.2, "startTheta": 42.0, "startPhi": 0.0,
-  "startThetaDot": 0.0, "startPhiDot": 180.0, "pivotFriction": 0.02,
-
-  "segments": 30, "ropeLength": 1.34, "ropeWidth": 0.024, "linearDensity": 0.25,
+  "startThetaDot": 0.0, "startPhiDot": 140.0, "pivotFriction": 0.03,
+  "segments": 30, "ropeLength": 1.34, "ropeWidth": 0.014,
+  "linearDensity": 0.1304,
   "substeps": 4, "constraintIterations": 10,
-  "compliance": 0.00002,
-  "internalDampingRate": 0.25,
-  "stretchLimit": 1.1,
-  "enableBending": true, "bendingStiffness": 0.008,
+  "compliance": 0.0001209,
+  "internalDampingRate": 0.05,
+  "stretchDampingBeta": 0.08,
+  "stretchLimit": 1.15,
+  "enableBending": true, "bendingStiffness": 0.00101,
   "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
-
   "enableTorsion": true, "initialTurns": 0.0,
-  "torsionalStiffness": 20.0, "dampingRatio": 0.15,
-  "torsionRadius": 0.012, "torsionIterations": 8,
-  "clampPivotTwist": true, "maxTwistRate": 400.0
+  "torsionalStiffness": 0.01169, "dampingRatio": 0.25,
+  "torsionRadius": 0.007, "torsionIterations": 6,
+  "clampPivotTwist": true, "maxTwistRate": 300.0
 }

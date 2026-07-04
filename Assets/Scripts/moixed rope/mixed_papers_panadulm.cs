@@ -142,7 +142,18 @@ public class MooringLinePBD_Spherical : MonoBehaviour
         }
 
         velocities[numSegments] = CartesianVelocityFromSpherical(th, ph, thDot, phDot);
+Vector3 ballInitVel = CartesianVelocityFromSpherical(th, ph, thDot, phDot);
 
+for (int i = 0; i <= numSegments; i++)
+{
+    if (invMass[i] == 0f) continue; // pivot يبقى صفرًا
+    
+    float factor = (float)i / numSegments; // 0 عند pivot, 1 عند ball
+    velocities[i] = ballInitVel * factor;
+    
+    // تحديث prev لـ Verlet (لو كنت تستخدمه)
+    // positions[i] → prev[i] = positions[i] - velocities[i] * Time.fixedDeltaTime / subSteps;
+}
         for (int m = 1; m < numSegments; m++)
         {
             Vector3 vA  = positions[m - 1] - positions[m];
@@ -159,6 +170,12 @@ public class MooringLinePBD_Spherical : MonoBehaviour
 
     void FixedUpdate()
     {
+
+//         for (int i = 0; i < numSegments; i++)
+// {
+//     float dv = (velocities[i + 1] - velocities[i]).magnitude;
+//     Debug.Log($"Δv[{i}] = {dv}");
+// }
         float dt = Time.fixedDeltaTime;
         if (dt <= 0f) return;
 

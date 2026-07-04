@@ -1,0 +1,21 @@
+using UnityEngine;
+using static Fluid_Sim_3D.Utilities.ComputeHelper;
+
+class StandardSurfaceTension : GPUExecuter
+{
+    public StandardSurfaceTension(FluidModel model, ComputeShader compute, string kernelName) : base(model, compute, kernelName)
+    {
+    }
+
+    public override void BindsBuffers()
+    {
+        SetBuffers(_compute, _kernel, _model.bufferNameLookup, new ComputeBuffer[]
+        {
+            _model._predictedPositionsBuffer,
+            _model.VelocitiesBuffer,
+            _model._densityBuffer,
+            _model.spatialHash.SpatialKeys,
+            _model.spatialHash.SpatialOffsets,
+        });
+    }
+}

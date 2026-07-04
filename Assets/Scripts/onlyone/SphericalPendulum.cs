@@ -199,5 +199,19 @@ namespace onlyone
             Gizmos.color = Color.yellow;
             Gizmos.DrawSphere(pivot.position, 0.03f);
         }
+        private void OnGUI()
+        {
+            GUILayout.BeginArea(new Rect(10, 10, 300, 180), GUI.skin.box);
+
+            GUILayout.Label($"Effective Length : {EffectiveLength:F4} m");
+            GUILayout.Label($"Theta            : {Theta * Mathf.Rad2Deg:F2}°");
+            GUILayout.Label($"Phi              : {Phi * Mathf.Rad2Deg:F2}°");
+            GUILayout.Label($"ThetaDot         : {ThetaDot:F3} rad/s");
+            GUILayout.Label($"PhiDot           : {PhiDot:F3} rad/s");
+            GUILayout.Label($"Tension : {Tension:F2} N");
+            GUILayout.Label($"Energy  : {TotalEnergy:F3} J");
+
+            GUILayout.EndArea();
+        }
     }
 }

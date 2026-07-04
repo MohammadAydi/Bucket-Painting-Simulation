@@ -6,10 +6,6 @@ Shader "Fluid/FluidComposite_URP"
         Cull Off  ZWrite Off  ZTest Always
 
         // ── Pass 0: Shade fluid pixels into outRT ─────────────────────────────
-        // _CompTex and _NormalTex are set directly on the material from C# before
-        // the draw — no globals needed.
-        // Background pixels (compRT.a >= 9999999) → discard → outRT untouched.
-        // Fluid pixels → shaded colour + alpha=1.
         Pass
         {
             Name "FluidComposite"
@@ -31,6 +27,12 @@ Shader "Fluid/FluidComposite_URP"
             float  _Shininess;
             float  _ReflectStrength;
 
+            // ── New lighting controls (set from C# inspector) ─────────────────
+            float  _AmbientStrength;     // minimum brightness on fully-shadowed surfaces
+            float  _UseHalfLambert;      // 1 = soft wrap, 0 = classic hard Lambert
+            float  _FillLightStrength;   // secondary upward fill light intensity
+            float3 _FillLightColor;      // colour of the fill light (e.g. warm floor bounce)
+
             float3 WorldViewDir(float2 uv)
             {
                 float3 viewDir = mul(unity_CameraInvProjection, float4(uv * 2.0 - 1.0, 0, -1)).xyz;
@@ -44,7 +46,6 @@ Shader "Fluid/FluidComposite_URP"
                 float4 comp     = SAMPLE_TEXTURE2D(_CompTex,  sampler_CompTex,  uv);
                 float  rawDepth = comp.a;
 
-                // No fluid here — leave outRT unwritten (alpha stays 0)
                 if (rawDepth >= 9999999.0)
                     discard;
 
@@ -58,27 +59,47 @@ Shader "Fluid/FluidComposite_URP"
                 float3 paintCol = _PaintColor.rgb;
                 float3 lightCol = mainLight.color;
 
-                float3 ambient   = paintCol * 0.08;
-                float3 diffuse   = paintCol * lightCol * max(0.0, dot(N, L));
-                float3 specular  = lightCol * _SpecularStrength * pow(max(0.0, dot(N, H)), _Shininess);
+                // ── Ambient ───────────────────────────────────────────────────
+                // Inspector-tunable minimum so shadowed surfaces never go black.
+                float3 ambient = paintCol * _AmbientStrength;
 
-                float3 R         = reflect(-V, N);
-                float  skyBlend  = saturate(R.y * 0.5 + 0.5);
+                // ── Diffuse ───────────────────────────────────────────────────
+                // Half-Lambert wraps dot(N,L) from [-1,1] into [0,1] so the
+                // dark side of the fluid still receives 0 (not negative) light,
+                // and the terminator is a soft gradient instead of a hard cliff.
+                float NdotL = dot(N, L);
+                float diffTerm = _UseHalfLambert > 0.5
+                    ? NdotL * 0.5 + 0.5          // half-Lambert: maps to [0, 1]
+                    : max(0.0, NdotL);            // classic Lambert: maps to [0, 1]
+                float3 diffuse = paintCol * lightCol * diffTerm;
+
+                // ── Fill light ────────────────────────────────────────────────
+                // Simulates indirect bounce from the floor / environment.
+                // Direction is straight up (0,1,0) — light coming from below,
+                // which fills in the underside of blobs and sideways-facing normals.
+                float3 fillDir  = float3(0, 1, 0);
+                float  fillDot  = max(0.0, dot(N, fillDir));
+                float3 fill     = paintCol * _FillLightColor * fillDot * _FillLightStrength;
+
+                // ── Specular ──────────────────────────────────────────────────
+                float3 specular = lightCol * _SpecularStrength
+                                * pow(max(0.0, dot(N, H)), _Shininess);
+
+                // ── Reflection ────────────────────────────────────────────────
+                float3 R        = reflect(-V, N);
+                float  skyBlend = saturate(R.y * 0.5 + 0.5);
                 float3 reflColor = lerp(float3(0.3, 0.25, 0.2), float3(0.5, 0.6, 0.8), skyBlend);
-                float  fresnel   = pow(1.0 - saturate(dot(N, V)), 3.0);
+                float  fresnel  = pow(1.0 - saturate(dot(N, V)), 3.0);
                 float3 reflection = reflColor * _ReflectStrength * (0.2 + 0.8 * fresnel);
 
-                float3 finalColor = ambient + diffuse + specular + reflection;
+                float3 finalColor = ambient + diffuse + fill + specular + reflection;
 
-                return float4(finalColor, 1.0);  // alpha=1 → fluid pixel for blend pass
+                return float4(finalColor, 1.0);
             }
             ENDHLSL
         }
 
         // ── Pass 1: Alpha-blend outRT over camera colour ──────────────────────
-        // C# calls Blitter.BlitTexture(cmd, outHandle, scaleOffset, material, 1)
-        // which sets _BlitTexture = outRT automatically before drawing.
-        // Blend: fluid (alpha=1) → fully writes; background (alpha=0) → no-op.
         Pass
         {
             Name "FluidCopyToCamera"
@@ -93,7 +114,6 @@ Shader "Fluid/FluidComposite_URP"
 
             float4 fragCopy(Varyings IN) : SV_Target
             {
-                // _BlitTexture is set by Blitter before this draw call
                 return SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, IN.texcoord);
             }
             ENDHLSL

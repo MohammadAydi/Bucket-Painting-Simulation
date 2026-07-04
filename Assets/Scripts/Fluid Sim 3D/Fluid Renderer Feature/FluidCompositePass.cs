@@ -5,12 +5,16 @@ using UnityEngine.Rendering.RenderGraphModule;
 
 public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
 {
-    static readonly int s_PaintColor       = Shader.PropertyToID("_PaintColor");
-    static readonly int s_SpecularStrength = Shader.PropertyToID("_SpecularStrength");
-    static readonly int s_Shininess        = Shader.PropertyToID("_Shininess");
-    static readonly int s_ReflectStrength  = Shader.PropertyToID("_ReflectStrength");
-    static readonly int s_CompTex          = Shader.PropertyToID("_CompTex");
-    static readonly int s_NormalTex        = Shader.PropertyToID("_NormalTex");
+    static readonly int s_PaintColor        = Shader.PropertyToID("_PaintColor");
+    static readonly int s_SpecularStrength  = Shader.PropertyToID("_SpecularStrength");
+    static readonly int s_Shininess         = Shader.PropertyToID("_Shininess");
+    static readonly int s_ReflectStrength   = Shader.PropertyToID("_ReflectStrength");
+    static readonly int s_CompTex           = Shader.PropertyToID("_CompTex");
+    static readonly int s_NormalTex         = Shader.PropertyToID("_NormalTex");
+    static readonly int s_AmbientStrength   = Shader.PropertyToID("_AmbientStrength");
+    static readonly int s_UseHalfLambert    = Shader.PropertyToID("_UseHalfLambert");
+    static readonly int s_FillLightStrength = Shader.PropertyToID("_FillLightStrength");
+    static readonly int s_FillLightColor    = Shader.PropertyToID("_FillLightColor");
 
     FluidRendererFeature _feature;
     Material             _mat;
@@ -19,7 +23,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
     public void Setup(FluidRendererFeature feature)
     {
         _feature = feature;
-        renderPassEvent = RenderPassEvent.AfterRenderingTransparents + 4;
+        renderPassEvent = RenderPassEvent.AfterRenderingTransparents+ 4;
 
         if (_mat == null && feature.fluidCompositeShader)
             _mat = CoreUtils.CreateEngineMaterial(feature.fluidCompositeShader);
@@ -36,10 +40,14 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
 
         FluidRTPool.EnsureCompositeOutRT(ref s_OutRT, w, h);
 
-        _mat.SetColor(s_PaintColor,       _feature.paintColor);
-        _mat.SetFloat(s_SpecularStrength, _feature.specularStrength);
-        _mat.SetFloat(s_Shininess,        _feature.specularShininess);
-        _mat.SetFloat(s_ReflectStrength,  _feature.reflectionStrength);
+        _mat.SetColor(s_PaintColor,        _feature.paintColor);
+        _mat.SetFloat(s_SpecularStrength,  _feature.specularStrength);
+        _mat.SetFloat(s_Shininess,         _feature.specularShininess);
+        _mat.SetFloat(s_ReflectStrength,   _feature.reflectionStrength);
+        _mat.SetFloat(s_AmbientStrength,   _feature.ambientStrength);
+        _mat.SetFloat(s_UseHalfLambert,    _feature.useHalfLambert ? 1f : 0f);
+        _mat.SetFloat(s_FillLightStrength, _feature.fillLightStrength);
+        _mat.SetColor(s_FillLightColor,    _feature.fillLightColor);
 
         // Bind fluid textures directly on the material — persistent RTHandles,
         // safe to set outside the graph, guaranteed bound when the shader runs.

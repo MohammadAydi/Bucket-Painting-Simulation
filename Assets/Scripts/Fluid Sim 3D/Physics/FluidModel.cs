@@ -82,7 +82,7 @@ class FluidModel : IDisposable
     }
 
 
-    void setViscositySolver(
+    public void setViscositySolver(
         ViscositySolverMethod method
     )
     {
@@ -91,9 +91,10 @@ class FluidModel : IDisposable
             ViscositySolverMethod.Standard => new StandardViscosity(this, _SPHCompute, "StandardViscositySolver"),
             _ => throw new ArgumentOutOfRangeException()
         };
+        _viscosityForce.BindsBuffers();
     }
 
-    void setPressureSolver(
+    public void setPressureSolver(
         PressureSolverMethod method
     )
     {
@@ -103,9 +104,10 @@ class FluidModel : IDisposable
             PressureSolverMethod.NearPressure => new NearPressureSolver(this, _SPHCompute, "NearPressureSolver"),
             _ => throw new ArgumentOutOfRangeException()
         };
+        _pressureForce.BindsBuffers();
     }
 
-    void setSurfaceTensionSolver(
+    public void setSurfaceTensionSolver(
         SurfaceTensionSolverMethod method
     )
     {
@@ -114,6 +116,7 @@ class FluidModel : IDisposable
             SurfaceTensionSolverMethod.Standard => new StandardSurfaceTension(this, _SPHCompute, "StandardSurfaceTension"),
             _ => throw new ArgumentOutOfRangeException()
         };
+        _surfaceTensionForce.BindsBuffers();
     }
 
     void CreateBuffers()

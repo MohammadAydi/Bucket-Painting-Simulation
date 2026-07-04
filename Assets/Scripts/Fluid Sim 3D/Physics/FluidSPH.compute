@@ -71,14 +71,14 @@ static const int3 CellOffsets[27] =
 // ─────────────────────────────────────────────────────────────
 // Module Includes
 // ─────────────────────────────────────────────────────────────
-#include "GravityForce.hlsl"
-#include "PositionPredictor.hlsl"
-#include "NeighborsSearching.hlsl"
-#include "calcDensity.hlsl"
-#include "PressureSolver.hlsl"
-#include "ViscositySolver.hlsl"
-#include "SurfaceTensionSolver.hlsl"
-#include "Integrate.hlsl"
+#include "../Physics/Gravity/GravityForce.hlsl"
+#include "../Physics/PositionPredictor/PositionPredictor.hlsl"
+#include "../Physics/NeighborsSearching/NeighborsSearching.hlsl"
+#include "../Physics/Density/DensityCalc.hlsl"
+#include "../Physics/Pressure/PressureSolver.hlsl"
+#include "../Physics/Viscosity/ViscositySolver.hlsl"
+#include "../Physics/SurfaceTension/SurfaceTensionSolver.hlsl"
+#include "../Physics/Integrator//Integrate.hlsl"
 
 // ─────────────────────────────────────────────────────────────
 // Kernel Definitions

@@ -16,9 +16,7 @@ public class FluidManager3D : MonoBehaviour
     public int iterationsPerFrame = 3;
     public bool inSlowMode = false;
 
-
     SpawnSystem3D _spawnSystem;
-    // PhysicsSystem3D _physicsSystem;
     RenderSystem3D _renderSystem;
 
     private float ActiveTimeScale => inSlowMode ? slowTimeScale : normalTimeScale;
@@ -40,6 +38,9 @@ public class FluidManager3D : MonoBehaviour
     float _lastViscosityCoeff;
     float _lastSurfaceTensionCoeff;
     float _lastSurfaceTensionThreshold;
+    PressureSolverMethod _lastPressureSolverMethod;
+    ViscositySolverMethod _lastViscositySolverMethod;
+    SurfaceTensionSolverMethod _lastSurfaceTensionSolverMethod;
 
     public ComputeBuffer PositionsBuffer => _fluidModel?.PositionsBuffer;
     public ComputeBuffer VelocitiesBuffer => _fluidModel?.VelocitiesBuffer;
@@ -53,7 +54,6 @@ public class FluidManager3D : MonoBehaviour
 
     void Start()
     {
-        Debug.Log("FluidManager3D Start called.");
         if (settings != null)
             settings.OnChanged += OnSettingsChanged;
 
@@ -62,27 +62,14 @@ public class FluidManager3D : MonoBehaviour
 
     void OnEnable()
     {
-        // 1. Hook up the event listener
         if (settings != null)
         {
-            settings.OnChanged -= OnSettingsChanged; // Avoid double-subscribing
+            settings.OnChanged -= OnSettingsChanged;
             settings.OnChanged += OnSettingsChanged;
         }
 
-        // 2. Force full setup on enable so Edit Mode works immediately
         InitializeSystems();
     }
-
-
-    // void OnValidate()
-    // {
-    //     if (Application.isPlaying) return;
-
-    //     if (boundaryVolume == null)
-    //         boundaryVolume = FindObjectOfType<FluidBoundary3D>();
-
-    //     InitializeSystems();
-    // }
 
     void Update()
     {
@@ -90,7 +77,6 @@ public class FluidManager3D : MonoBehaviour
         float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; // If framerate dips too low, run the simulation slower than real-time
         float dt = Mathf.Min(Time.deltaTime * ActiveTimeScale, maxDeltaTime);
         RunSimulationFrame(dt);
-
     }
 
     void RunSimulationFrame(float frameDeltaTime)
@@ -190,6 +176,19 @@ public class FluidManager3D : MonoBehaviour
         if (_lastVelocityDisplayMax != settings.velocityDisplayMax)
             _renderSystem.SyncMaterial(settings);
 
+        if(_lastPressureSolverMethod != settings.pressureSolverMethod)
+        {
+            _fluidModel.setPressureSolver(settings.pressureSolverMethod);
+        }
+        if(_lastViscositySolverMethod != settings.viscositySolverMethod)
+        {
+            _fluidModel.setViscositySolver(settings.viscositySolverMethod);
+        }
+        if(_lastSurfaceTensionSolverMethod != settings.surfaceTensionSolverMethod)
+        {
+            _fluidModel.setSurfaceTensionSolver(settings.surfaceTensionSolverMethod);
+        }
+
         CacheSettings();
     }
 
@@ -211,5 +210,9 @@ public class FluidManager3D : MonoBehaviour
         _lastViscosityCoeff = settings.viscosityCoeff;
         _lastSurfaceTensionCoeff = settings.surfaceTensionCoeff;
         _lastSurfaceTensionThreshold = settings.surfaceTensionThreshold;
+
+        _lastPressureSolverMethod = settings.pressureSolverMethod;
+        _lastViscositySolverMethod = settings.viscositySolverMethod;
+        _lastSurfaceTensionSolverMethod = settings.surfaceTensionSolverMethod;
     }
 }

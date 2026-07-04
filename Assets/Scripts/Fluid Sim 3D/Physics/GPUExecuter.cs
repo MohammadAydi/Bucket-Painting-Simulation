@@ -15,7 +15,6 @@ abstract class GPUExecuter
     {
         _model = model;
         _compute = compute;
-        Debug.Log($"Object: {_compute}, IsNull: {_compute == null}");
         _kernel = _compute.FindKernel(kernelName);
         realGroups = Mathf.CeilToInt(_model.ParticleCount / (float)Config.ThreadsPerGroup);
 

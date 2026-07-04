@@ -20,5 +20,5 @@
   "enableTorsion": true, "initialTurns": 0.0,
   "torsionalStiffness": 8.0, "dampingRatio": 0.30,
   "torsionRadius": 0.01, "torsionIterations": 8,
-  "clampPivotTwist": true, "maxTwistRate": 400.0
+  "clampPivotTwist": true, "maxTwistRate": 400.0 
 }

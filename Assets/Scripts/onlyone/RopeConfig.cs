@@ -21,9 +21,9 @@ namespace onlyone
         [Header("Pendulum (شروط البداية)")]
         public float length = 1.2f;
         public float startTheta = 32f;
-        public float startPhi = 0f;
-        public float startThetaDot = 0f;
-        public float startPhiDot = 0f;
+        public float startPhi;
+        public float startThetaDot;
+        public float startPhiDot;
         public float pivotFriction = 0.02f;
 
         [Header("Rope")]
@@ -51,6 +51,6 @@ namespace onlyone
         public bool  clampPivotTwist = true;
         public float maxTwistRate = 600f;
         
-        public float stretchDampingRatio = 0f;
+        public float stretchDampingRatio;
     }
 }

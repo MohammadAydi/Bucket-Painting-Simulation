@@ -2,70 +2,65 @@ using System;
 using UnityEngine;
 
 namespace onlyone
-{
+{ 
     [DisallowMultipleComponent]
     public class SphericalPendulum : MonoBehaviour
     {
-        [Header("Scene References")] 
+        [Header("Scene References")]
         [SerializeField] private Transform pivot;
- 
         [SerializeField] private Transform bob;
 
-        [Header("Suspension (التعليق)")]
-        [Tooltip("Rope length l (meters).")]
+        [Header("Suspension")]
+        [Tooltip("Rope length l (meters). يُستخدم للرسم في الوضع المستقل فقط.")]
         [SerializeField, Min(0.01f)] public float length = 1.2f;
 
-        [Tooltip("يُطفئه PbdRope تلقائياً عند الاقتران، فيتوقّف النواس عن تحريك الدلو.")]
+        [Tooltip("يُطفئه PbdRope عند الاقتران، فيتوقّف النواس عن تحريك الدلو.")]
         public bool driveBucket = true;
- 
-        [HideInInspector] public bool externallyDriven = false;
 
-        [Header("Motion - initial conditions (الحركة)")]
-        [Tooltip("Initial polar angle theta_0 from the downward vertical (deg).")]
+        [Tooltip("يضبطه PbdRope: true = مُراقِب (الحبل يقود)، false = حلّال RK4 مستقل.")]
+        [HideInInspector] public bool externallyDriven;
+
+        [Header("Initial Conditions (تُقرأ من الحبل عند الإطلاق)")]
         [SerializeField] private float startTheta = 60f;
+        [SerializeField] private float startPhi;
+        [SerializeField] private float startThetaDot;
+        [Tooltip("0 = تأرجح مستوٍ؛ غير صفر = تأرجح مخروطي.")]
+        [SerializeField] private float startPhiDot;
 
-        [Tooltip("Initial azimuthal angle phi_0 (deg).")]
-        [SerializeField] private float startPhi = 0f;
-
-        [Tooltip("Initial polar angular velocity theta'_0 (deg/s).")]
-        [SerializeField] private float startThetaDot = 0f;
-
-        [Tooltip("Initial azimuthal angular velocity phi'_0 (deg/s). " +
-                 "0 = flat swing; non-zero = conical / orbiting swing.")]
-        [SerializeField] private float startPhiDot = 0f;
-
-        [Header("Environment (البيئة)")]
+        [Header("Environment (الوضع المستقل فقط)")]
         [SerializeField] private float gravity = 9.81f;
         [SerializeField, Min(0f)] private float airDensity = 1.225f;
-
-        [Tooltip("Pivot/rope friction f (1/s). Small constant damping at the suspension point.")]
+        [Tooltip("احتكاك المحور f (1/s).")]
         [SerializeField, Min(0f)] private float pivotFriction = 0.02f;
 
-        [Header("Bucket / Bob (الدلو)")]
+        [Header("Bucket")]
         [SerializeField, Min(0.001f)] private float mass = 3.0f;
-
-        [Tooltip("Bucket radius (m). Frontal area used for drag = pi * r^2.")]
         [SerializeField, Min(0f)] private float bucketRadius = 0.13f;
-
-        [Tooltip("Drag coefficient Cd. ~0.47 sphere, ~1.0 open bucket, ~1.05 cube.")]
+        [Tooltip("Cd. ~0.47 كرة، ~1.0 دلو مفتوح.")]
         [SerializeField, Min(0f)] private float dragCoefficient = 1.0f;
 
-        [Header("Integration")]
+        [Header("Integration (الوضع المستقل فقط)")]
         [SerializeField, Min(0.0001f)] private float fixedStep = 0.004f;
-
+ 
         private double th, ph, thDot, phDot;
         private double accumulator;
-        private double effectiveLength;
+        private RopeState state;
 
         private const double MinSin = 1e-3;
         private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
-
+ 
         public double Theta           => th;
         public double Phi             => ph;
         public double ThetaDot        => thDot;
         public double PhiDot          => phDot;
-        public double EffectiveLength => effectiveLength;
+        public double EffectiveLength => state.EffLength > 0 ? state.EffLength : length;
         public float  Mass            => mass;
+ 
+        public double Tension         => state.Tension;
+        public double KineticEnergy   => state.KineticEnergy;
+        public double PotentialEnergy => state.PotentialEnergy;
+        public double ElasticEnergy   => state.ElasticEnergy;
+        public double TotalEnergy     => state.TotalEnergy;
 
         public float StartThetaRad    => startTheta    * Mathf.Deg2Rad;
         public float StartPhiRad      => startPhi      * Mathf.Deg2Rad;
@@ -81,40 +76,50 @@ namespace onlyone
                 return;
             }
             Relaunch();
-            RenderPendulum();
+            if (driveBucket) RenderPendulum();
         }
- 
+
         public void ApplyConfig(RopeConfig c)
         {
-            length        = c.length;
-            startTheta    = c.startTheta;
-            startPhi      = c.startPhi;
-            startThetaDot = c.startThetaDot;
-            startPhiDot   = c.startPhiDot;
-            gravity       = c.gravity;
-            airDensity    = c.airDensity;
-            pivotFriction = c.pivotFriction;
-            mass          = c.bucketMass;          
-            bucketRadius  = c.bucketRadius;         
+            length          = c.length;
+            startTheta      = c.startTheta;
+            startPhi        = c.startPhi;
+            startThetaDot   = c.startThetaDot;
+            startPhiDot     = c.startPhiDot;
+            gravity         = c.gravity;
+            airDensity      = c.airDensity;
+            pivotFriction   = c.pivotFriction;
+            mass            = c.bucketMass;
+            bucketRadius    = c.bucketRadius;
             dragCoefficient = c.bucketDragCoefficient;
-            fixedStep     = c.fixedStep;
+            fixedStep       = c.fixedStep;
             Relaunch();
         }
 
-        [ContextMenu("Relaunch (إعادة التجربة)")]
+        [ContextMenu("Relaunch")]
         public void Relaunch()
         {
             th    = startTheta    * Mathf.Deg2Rad;
             ph    = startPhi      * Mathf.Deg2Rad;
             thDot = startThetaDot * Mathf.Deg2Rad;
             phDot = startPhiDot   * Mathf.Deg2Rad;
-            effectiveLength = length;
+            state = new RopeState(th, ph, thDot, phDot, length, 0, 0, 0, 0);
             accumulator = 0;
         }
-
+ 
+        public void PushState(in RopeState s)
+        {
+            state = s;
+            th = s.Theta; ph = s.Phi; thDot = s.ThetaDot; phDot = s.PhiDot;
+        }
+ 
+        public void SetStateFromWorld(double theta, double phi,
+            double thetaDot, double phiDot, double effLen)
+            => PushState(new RopeState(theta, phi, thetaDot, phiDot, effLen, 0, 0, 0, 0));
+ 
         private void Update()
         {
-            if (externallyDriven) return;
+            if (externallyDriven) return;   // الحبل يقود، لا تكامل هنا.
 
             accumulator += Time.deltaTime;
             if (accumulator > 0.25) accumulator = 0.25;
@@ -123,6 +128,7 @@ namespace onlyone
                 Integrate(fixedStep);
                 accumulator -= fixedStep;
             }
+            state = new RopeState(th, ph, thDot, phDot, length, 0, 0, 0, 0);
             RenderPendulum();
         }
 
@@ -168,15 +174,6 @@ namespace onlyone
             thDot += h / 6.0 * (k1Thd + 2*k2Thd + 2*k3Thd + k4Thd);
             ph    += h / 6.0 * (k1Ph  + 2*k2Ph  + 2*k3Ph  + k4Ph);
             phDot += h / 6.0 * (k1Phd + 2*k2Phd + 2*k3Phd + k4Phd);
-        }
-
-        // ── Feedback: rope -> pendulum (called by PbdRope every physics step) ────
-        public void SetStateFromWorld(double theta, double phi,
-            double thetaDot, double phiDot, double effLen)
-        {
-            th = theta;       ph = phi;
-            thDot = thetaDot; phDot = phiDot;
-            effectiveLength = effLen;
         }
 
         private void RenderPendulum()

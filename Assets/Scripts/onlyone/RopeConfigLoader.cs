@@ -12,10 +12,10 @@ namespace onlyone
         [SerializeField] private PbdRope rope;
 
         [Tooltip("اسحب ملفات التجارب (JSON كـ TextAsset) هنا.")]
-        [SerializeField] private List<TextAsset> configs = new List<TextAsset>();
+        [SerializeField] private List<TextAsset> configs = new();
 
         [Tooltip("رقم التجربة المختارة (تضبطه القائمة المنسدلة في الـ Inspector).")]
-        [SerializeField] private int selected = 0;
+        [SerializeField] private int selected;
 
         private int applied = -1;
  
@@ -41,7 +41,8 @@ namespace onlyone
         public int Selected { get => selected; set => selected = value; }
 
         private void Start() => Apply(selected);
-  
+        
+        // ReSharper disable Unity.PerformanceAnalysis
         public void Apply(int index)
         {
             if (configs == null || configs.Count == 0) return;

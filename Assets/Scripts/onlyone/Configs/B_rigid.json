@@ -10,12 +10,13 @@
   "substeps": 8, "constraintIterations": 20,
   "compliance": 0.0000000398,
   "internalDampingRate": 0.02,
-  "stretchDampingBeta": 0.002,
+  "stretchDampingRatio": 0.002,
   "stretchLimit": 1.01,
   "enableBending": true, "bendingStiffness": 7.54,
   "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
   "enableTorsion": true, "initialTurns": 0.0,
   "torsionalStiffness": 19.33, "dampingRatio": 0.02,
-  "torsionRadius": 0.002, "torsionIterations": 15,
-  "clampPivotTwist": true, "maxTwistRate": 500.0
+  "ropeRadius": 0.002, "torsionIterations": 15,
+  "clampPivotTwist": true, "maxTwistRate": 500.0,
+  "deriveFromMaterial": false
 }

@@ -15,11 +15,6 @@ public class ParticleSettings : ScriptableObject
     // PRESSURE_MODE_XXX define + Compute*PressureForce() function in
     // FluidMath.hlsl, and a case for it in CalculatePressureForces in
     // FluidCompute3D.compute. No other C# or shader plumbing changes needed.
-    public enum PressureSolverMode
-    {
-        Standard = 0,
-        NearPressure = 1,
-    }
 
     [Header("Count & Shape")]
     [Range(1, 1000000)]
@@ -81,7 +76,7 @@ public class ParticleSettings : ScriptableObject
     // Standard: classic SPH pressure only (your original solver).
     // NearPressure: Standard + an additional near-density/near-pressure term
     // for stronger short-range repulsion (matches the instructor reference).
-    public PressureSolverMode pressureSolverMode = PressureSolverMode.NearPressure;
+    public PressureSolverMethod pressureSolverMethod = PressureSolverMethod.NearPressure;
     [Range(0f, 1000f)]
     public float pressureMultiplier = 288f;
     [Range(0f, 1000f)]
@@ -94,12 +89,16 @@ public class ParticleSettings : ScriptableObject
     public float nearPressureMultiplier = 2.15f;
 
     [Header("Viscosity")]
+
+    public ViscositySolverMethod viscositySolverMethod = ViscositySolverMethod.Standard;
     // μ — dynamic viscosity. Higher values make the fluid thicker (more honey-like).
     // Start around 0.1–0.5 for water-like behaviour; raise to 2–10 for syrup.
     [Range(0f, 1000f)]
     public float viscosityCoeff = 0f;
 
     [Header("Surface Tension")]
+    public SurfaceTensionSolverMethod surfaceTensionSolverMethod = SurfaceTensionSolverMethod.Standard;
+
     // σ — surface tension coefficient. Controls how strongly the surface minimises
     // its curvature. Start small (0.01–0.1) to avoid numerical blow-up.
     [Range(0f, 100)]

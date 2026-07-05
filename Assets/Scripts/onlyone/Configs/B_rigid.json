@@ -1,23 +1,27 @@
 {
-  "name": "حبل صلب (سلك مشدود)",
-  "description": "شبه غير قابل للتمدد (0.3%) ولا الانثناء: كسلك فولاذي. لا سَلَك (ropeLength=length)، تأرجح نظيف طويل الأمد، التواء صلب عالي التردد.",
+  "name": "كابل فولاذي شبه صلب",
   "gravity": 9.81, "fixedStep": 0.004,
   "bucketMass": 3.0, "bucketRadius": 0.13,
   "airDensity": 1.225, "bucketDragCoefficient": 1.0,
-
-  "length": 1.2, "startTheta": 60.0, "startPhi": 0.0,
-  "startThetaDot": 0.0, "startPhiDot": 180.0, "pivotFriction": 0.02,
-
-  "segments": 24, "ropeLength": 1.20, "ropeWidth": 0.006, "linearDensity": 0.08,
-  "substeps": 4, "constraintIterations": 12,
-  "compliance": 0.000005,
+  "length": 1.2, "startTheta": 45.0, "startPhi": 0.0,
+  "startThetaDot": 0.0, "startPhiDot": 0.0, "pivotFriction": 0.01,
+  "segments": 24, "ropeLength": 1.20, "ropeWidth": 0.004,
+  "linearDensity": 0.0987,
+  "substeps": 8, "constraintIterations": 20,
+  "compliance": 0.0000000398,
   "internalDampingRate": 0.02,
+<<<<<<< HEAD
   "stretchLimit": 1.02,
   "enableBending": true, "bendingStiffness": 0,
+=======
+  "stretchDampingRatio": 0.002,
+  "stretchLimit": 1.01,
+  "enableBending": true, "bendingStiffness": 7.54,
+>>>>>>> 6889110aa9069fc435eaa0a5d5de65457aec0204
   "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
-
   "enableTorsion": true, "initialTurns": 0.0,
-  "torsionalStiffness": 120.0, "dampingRatio": 0.02,
-  "torsionRadius": 0.003, "torsionIterations": 10,
-  "clampPivotTwist": true, "maxTwistRate": 400.0
+  "torsionalStiffness": 19.33, "dampingRatio": 0.02,
+  "ropeRadius": 0.002, "torsionIterations": 15,
+  "clampPivotTwist": true, "maxTwistRate": 500.0,
+  "deriveFromMaterial": false
 }

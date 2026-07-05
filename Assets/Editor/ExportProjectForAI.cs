@@ -13,20 +13,35 @@ public class ExportProjectForAI
 
         string[] folders =
         {
+            "Assets/ScriptableObjects",
             "Assets/Scripts/Bucket",
+            "Assets/Scripts/Canvas",
+            "Assets/Scripts/Studio",
+
             "Assets/Scripts/Fluid Sim 3D",
             
-            // "Assets/Scripts/Fluid Sim 3D/cumpute",
+            "Assets/Models",
+            "Assets/Prefabs",
+            "Assets/Resources",
+            "Assets/Shaders",
+            "Assets/Textures",
+            
+            // "Assets/Scripts/Fluid Sim 3D/compute",
+
             // "Assets/Scripts/Fluid Sim 3D/Data",
-            // "Assets/Scripts/Fluid Sim 3D/Display",
             // "Assets/Scripts/Fluid Sim 3D/Systems",
             // "Assets/Scripts/Fluid Sim 3D/Utilities",
             
             // "Assets/Scenes",
-            // "Assets/Prefabs",
-            // "Assets/ScriptableObjects",
-            // "Assets/Resources",
             // "Packages"
+        };
+
+        string[] files =
+        {
+            // "Assets/Scripts/Fluid Sim 3D/FluidManager3D.cs",
+            // "Assets/Scripts/Fluid Sim 3D/Display/ParticleCircle3D.shader",
+            // "Assets/Scripts/Fluid Sim 3D/Config.cs",
+            "Assets/Editor/HoleDataDrawer.cs",
         };
 
         StringBuilder builder = new StringBuilder();
@@ -41,47 +56,30 @@ public class ExportProjectForAI
                 continue;
 
             builder.AppendLine();
-            builder.AppendLine($"// ===== [{folder}] =====");
+            builder.AppendLine($"// ===== [FOLDER: {folder}] =====");
 
-            var files = Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories);
+            var folderFiles = Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories);
 
-            foreach (var file in files)
+            foreach (var file in folderFiles)
             {
-                string ext = Path.GetExtension(file);
-
-                if (ext != ".cs"
-                    && ext != ".shader"
-                    && ext != ".cginc"
-                    && ext != ".compute"
-                    && ext != ".json"
-                    && ext != ".asset"
-                    && ext != ".unity"
-                    && ext != ".asmdef")
-                    continue;
-
-                string relative =
-                    file.Replace(projectRoot + "\\", "")
-                        .Replace("\\", "/");
-
-                string content = File.ReadAllText(file);
-
-                content = Regex.Replace(content, @"//.*?$", "",
-                    RegexOptions.Multiline);
-
-                content = Regex.Replace(content,
-                    @"/\*.*?\*/",
-                    "",
-                    RegexOptions.Singleline);
-
-                content = Regex.Replace(content,
-                    @"^\s*$[\r\n]*",
-                    "",
-                    RegexOptions.Multiline);
-
-                builder.AppendLine();
-                builder.AppendLine($"// ===== {relative} =====");
-                builder.AppendLine(content);
+                ProcessFile(file, projectRoot, builder);
             }
+        }
+
+        foreach (string file in files)
+        {
+            string fullPath = Path.Combine(projectRoot, file);
+
+            if (!File.Exists(fullPath))
+            {
+                Debug.LogWarning($"File not found: {file}");
+                continue;
+            }
+
+            builder.AppendLine();
+            builder.AppendLine($"// ===== [FILE: {file}] =====");
+            
+            ProcessFile(fullPath, projectRoot, builder);
         }
 
         string output = Path.Combine(projectRoot, "UnityProjectExport.txt");
@@ -91,5 +89,31 @@ public class ExportProjectForAI
         Debug.Log("Export Finished : " + output);
 
         EditorUtility.RevealInFinder(output);
+    }
+
+    private static void ProcessFile(string filePath, string projectRoot, StringBuilder builder)
+    {
+        string ext = Path.GetExtension(filePath);
+
+        if (ext != ".cs"
+            && ext != ".shader"
+            && ext != ".cginc"
+            && ext != ".compute"
+            && ext != ".json"
+            && ext != ".asset"
+            && ext != ".unity"
+            && ext != ".asmdef")
+            return;
+
+        string relative = filePath.Replace(projectRoot + "\\", "").Replace("\\", "/");
+
+        string content = File.ReadAllText(filePath);
+
+        content = Regex.Replace(content, @"//.*?$", "", RegexOptions.Multiline);
+        content = Regex.Replace(content, @"/\*.*?\*/", "", RegexOptions.Singleline);
+        content = Regex.Replace(content, @"^\s*$[\r\n]*", "", RegexOptions.Multiline);
+
+        builder.AppendLine($"// ===== {relative} =====");
+        builder.AppendLine(content);
     }
 }

@@ -1,24 +1,22 @@
 {
-  "name": "حبل مطاطي يتغيّر طوله",
-  "description": "bungee: يستطيل ~17% تحت الدلو (Δx=mgNα=19cm)، يرتدّ طولياً بدور 0.88s، ويتخامد بفقد المطاط الداخلي العالي. الانحناء والالتواء رخوان كمطاط حقيقي.",
+  "name": "نايلون مضفور خفيف المرونة",
   "gravity": 9.81, "fixedStep": 0.004,
-  "bucketMass": 3.0, "bucketRadius": 0.13,
+  "bucketMass": 29.6, "bucketRadius": 0.13,
   "airDensity": 1.225, "bucketDragCoefficient": 1.0,
-
-  "length": 1.15, "startTheta": 60.0, "startPhi": 0.0,
-  "startThetaDot": 0.0, "startPhiDot": 120.0, "pivotFriction": 0.02,
-
-  "segments": 26, "ropeLength": 1.15, "ropeWidth": 0.02, "linearDensity": 0.06,
-  "substeps": 4, "constraintIterations": 8,
-  "compliance": 0.00025,
-  "internalDampingRate": 0.05,
-  "stretchDampingBeta": 0.02,
-  "stretchLimit": 1.5,
-  "enableBending": true, "bendingStiffness": 0.004,
+  "length": 1.2, "startTheta": 60.0, "startPhi": 0.0,
+  "startThetaDot": 0.0, "startPhiDot": 0.0, "pivotFriction": 0.02,
+  "segments": 26, "ropeLength": 1.22, "ropeWidth": 0.01,
+  "linearDensity": 0.0895,
+  "substeps": 6, "constraintIterations": 10,
+  "compliance": 0.000002987,
+  "internalDampingRate": 0.04,
+  "stretchDampingRatio": 0.015,
+  "stretchLimit": 1.08,
+  "enableBending": true, "bendingStiffness": 0.0419,
   "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
-
   "enableTorsion": true, "initialTurns": 0.0,
-  "torsionalStiffness": 8.0, "dampingRatio": 0.30,
-  "torsionRadius": 0.01, "torsionIterations": 8,
-  "clampPivotTwist": true, "maxTwistRate": 400.0 
+  "torsionalStiffness": 0.753, "dampingRatio": 0.08,
+  "ropeRadius": 0.005, "torsionIterations": 10,
+  "clampPivotTwist": true, "maxTwistRate": 300.0,
+  "deriveFromMaterial": false
 }

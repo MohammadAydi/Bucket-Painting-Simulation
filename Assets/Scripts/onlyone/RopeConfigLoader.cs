@@ -27,10 +27,13 @@ namespace onlyone
             {
                 if (!configs[i]) { names[i] = $"{i}: (فارغ)"; continue; }
                 string label = configs[i].name;
+                
                 try
                 {
                     RopeConfig c = JsonUtility.FromJson<RopeConfig>(configs[i].text);
                     if (c != null && !string.IsNullOrEmpty(c.name)) label = c.name;
+                    // Debug.Log("name is : " + c.name);
+                    // Debug.Log($"<color=red>[TEST]</color> Loaded stretchDampingRatio from JSON: {c.stretchDampingRatio}");
                 }
                 catch { /* أبقِ اسم الملف */ }
                 names[i] = $"{i + 1}. {label}";

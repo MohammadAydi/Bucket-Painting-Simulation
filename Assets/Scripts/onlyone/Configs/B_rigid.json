@@ -13,7 +13,7 @@
   "compliance": 0.000005,
   "internalDampingRate": 0.02,
   "stretchLimit": 1.02,
-  "enableBending": true, "bendingStiffness": 0.25,
+  "enableBending": true, "bendingStiffness": 0,
   "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
 
   "enableTorsion": true, "initialTurns": 0.0,

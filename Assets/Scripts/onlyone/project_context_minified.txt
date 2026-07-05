@@ -1,0 +1,397 @@
+﻿
+// ==========================================
+// FILE: HandleMidpointTracker.cs
+// ==========================================
+using UnityEngine;
+namespace onlyone
+{
+    [DefaultExecutionOrder(-10)] 
+    public class HandleMidpointTracker : MonoBehaviour
+    { 
+        [SerializeField] private BucketHandleGenerator handleGenerator;
+        [SerializeField] private BucketGenerator bucketGenerator; 
+        private void LateUpdate()
+        {
+            if (!handleGenerator || !bucketGenerator) return;
+            transform.position = GetHandleMidpoint();
+        }
+        private Vector3 GetHandleMidpoint()
+        {
+            float r = bucketGenerator.topRadius + handleGenerator.clearance;
+            float h = bucketGenerator.height;
+            Vector3 localMid = new Vector3(0f, h + r, 0f);
+            return handleGenerator.transform.TransformPoint(localMid);
+        }
+#if UNITY_EDITOR
+        private void OnDrawGizmosSelected()
+        {
+            if (handleGenerator == null || bucketGenerator == null) return;
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawSphere(GetHandleMidpoint(), 0.02f);
+        }
+#endif
+    }
+}
+
+
+
+// ==========================================
+// FILE: PbdRope.cs
+// ==========================================
+using System;
+using UnityEngine;
+namespace onlyone
+{
+
+
+
+// ==========================================
+// FILE: RopeConfig.cs
+// ==========================================
+using System;
+using UnityEngine;
+namespace onlyone
+{
+    [Serializable]
+    public class RopeConfig
+    {
+        [Header("Identity")]
+        public string name = "Preset";
+        public string description = "";
+        [Header("Shared")]
+        public float gravity = 9.81f;
+        public float fixedStep = 0.004f;
+        public float bucketMass = 3f;
+        public float bucketRadius = 0.13f;
+        public float airDensity = 1.225f;
+        public float bucketDragCoefficient = 1.0f;
+        [Header("Pendulum (Ø´Ø±ÙˆØ· Ø§Ù„Ø¨Ø¯Ø§ÙŠØ©)")]
+        public float length = 1.2f;
+        public float startTheta = 32f;
+        public float startPhi;
+        public float startThetaDot;
+        public float startPhiDot;
+        public float pivotFriction = 0.02f;
+        [Header("Rope")]
+        public int   segments = 26;
+        public float ropeLength = 1.22f;
+        public float ropeWidth = 0.008f;
+        public float linearDensity = 0.1f;
+        public int   substeps = 4;
+        public int   constraintIterations = 8;
+        public float compliance = 0.00004f;
+        public float internalDampingRate = 0.05f;
+        public float stretchLimit = 1.2f;
+        public bool  enableBending = true;
+        public float bendingStiffness = 0.02f;
+        public Vector3 wind = Vector3.zero;
+        public bool  dynamicBucket = true;
+        [Header("Torsion")]
+        public bool  enableTorsion = true;
+        public float initialTurns = 8f;
+        public float torsionalStiffness = 25f;
+        public float dampingRatio = 0.10f;
+        public float torsionRadius = 0.015f;
+        public int   torsionIterations = 8;
+        public bool  clampPivotTwist = true;
+        public float maxTwistRate = 600f;
+        public float stretchDampingRatio;
+    }
+}
+
+
+
+// ==========================================
+// FILE: RopeConfigLoader.cs
+// ==========================================
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+namespace onlyone
+{
+    [DefaultExecutionOrder(-50)]
+    public sealed class RopeConfigLoader : MonoBehaviour
+    {
+        [Header("Targets")]
+        [SerializeField] private SphericalPendulum pendulum;
+        [SerializeField] private PbdRope rope;
+        [Tooltip("Ø§Ø³Ø­Ø¨ Ù…Ù„ÙØ§Øª Ø§Ù„ØªØ¬Ø§Ø±Ø¨ (JSON ÙƒÙ€ TextAsset) Ù‡Ù†Ø§.")]
+        [SerializeField] private List<TextAsset> configs = new();
+        [Tooltip("Ø±Ù‚Ù… Ø§Ù„ØªØ¬Ø±Ø¨Ø© Ø§Ù„Ù…Ø®ØªØ§Ø±Ø© (ØªØ¶Ø¨Ø·Ù‡ Ø§Ù„Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ù…Ù†Ø³Ø¯Ù„Ø© ÙÙŠ Ø§Ù„Ù€ Inspector).")]
+        [SerializeField] private int selected;
+        private int applied = -1;
+        public string[] GetConfigNames()
+        {
+            if (configs == null || configs.Count == 0) return Array.Empty<string>();
+            var names = new string[configs.Count];
+            for (int i = 0; i < configs.Count; i++)
+            {
+                if (!configs[i]) { names[i] = $"{i}: (ÙØ§Ø±Øº)"; continue; }
+                string label = configs[i].name;
+                try
+                {
+                    RopeConfig c = JsonUtility.FromJson<RopeConfig>(configs[i].text);
+                    if (c != null && !string.IsNullOrEmpty(c.name)) label = c.name;
+                }
+                catch { /* Ø£Ø¨Ù‚Ù Ø§Ø³Ù… Ø§Ù„Ù…Ù„Ù */ }
+                names[i] = $"{i + 1}. {label}";
+            }
+            return names;
+        }
+        public int Selected { get => selected; set => selected = value; }
+        private void Start() => Apply(selected);
+
+
+
+// ==========================================
+// FILE: RopeState.cs
+// ==========================================
+namespace onlyone
+{ 
+    public readonly struct RopeState
+    {
+        public readonly double Theta;       
+        public readonly double Phi;        
+        public readonly double ThetaDot;     
+        public readonly double PhiDot;        
+        public readonly double EffLength;   
+        public readonly double Tension;   
+        public readonly double KineticEnergy;
+        public readonly double PotentialEnergy;
+        public readonly double ElasticEnergy;    
+        public readonly double TotalEnergy;
+        public RopeState(double theta, double phi, double thetaDot, double phiDot,
+            double effLen, double tension,
+            double ke, double pe, double elastic)
+        {
+            Theta = theta; Phi = phi; ThetaDot = thetaDot; PhiDot = phiDot;
+            EffLength = effLen; Tension = tension;
+            KineticEnergy = ke; PotentialEnergy = pe; ElasticEnergy = elastic;
+            TotalEnergy = ke + pe + elastic;
+        }
+    }
+}
+
+
+
+// ==========================================
+// FILE: SphericalPendulum.cs
+// ==========================================
+using System;
+using UnityEngine;
+namespace onlyone
+{ 
+    [DisallowMultipleComponent]
+    public class SphericalPendulum : MonoBehaviour
+    {
+        [Header("Scene References")]
+        [SerializeField] private Transform pivot;
+        [SerializeField] private Transform bob;
+        [Header("Suspension")]
+        [Tooltip("Rope length l (meters). ÙŠÙØ³ØªØ®Ø¯Ù… Ù„Ù„Ø±Ø³Ù… ÙÙŠ Ø§Ù„ÙˆØ¶Ø¹ Ø§Ù„Ù…Ø³ØªÙ‚Ù„ ÙÙ‚Ø·.")]
+        [SerializeField, Min(0.01f)] public float length = 1.2f;
+        [Tooltip("ÙŠÙØ·ÙØ¦Ù‡ PbdRope Ø¹Ù†Ø¯ Ø§Ù„Ø§Ù‚ØªØ±Ø§Ù†ØŒ ÙÙŠØªÙˆÙ‚Ù‘Ù Ø§Ù„Ù†ÙˆØ§Ø³ Ø¹Ù† ØªØ­Ø±ÙŠÙƒ Ø§Ù„Ø¯Ù„Ùˆ.")]
+        public bool driveBucket = true;
+        [Tooltip("ÙŠØ¶Ø¨Ø·Ù‡ PbdRope: true = Ù…ÙØ±Ø§Ù‚ÙØ¨ (Ø§Ù„Ø­Ø¨Ù„ ÙŠÙ‚ÙˆØ¯)ØŒ false = Ø­Ù„Ù‘Ø§Ù„ RK4 Ù…Ø³ØªÙ‚Ù„.")]
+        [HideInInspector] public bool externallyDriven;
+        [Header("Initial Conditions (ØªÙÙ‚Ø±Ø£ Ù…Ù† Ø§Ù„Ø­Ø¨Ù„ Ø¹Ù†Ø¯ Ø§Ù„Ø¥Ø·Ù„Ø§Ù‚)")]
+        [SerializeField] private float startTheta = 60f;
+        [SerializeField] private float startPhi;
+        [SerializeField] private float startThetaDot;
+        [Tooltip("0 = ØªØ£Ø±Ø¬Ø­ Ù…Ø³ØªÙˆÙØ› ØºÙŠØ± ØµÙØ± = ØªØ£Ø±Ø¬Ø­ Ù…Ø®Ø±ÙˆØ·ÙŠ.")]
+        [SerializeField] private float startPhiDot;
+        [Header("Environment (Ø§Ù„ÙˆØ¶Ø¹ Ø§Ù„Ù…Ø³ØªÙ‚Ù„ ÙÙ‚Ø·)")]
+        [SerializeField] private float gravity = 9.81f;
+        [SerializeField, Min(0f)] private float airDensity = 1.225f;
+        [Tooltip("Ø§Ø­ØªÙƒØ§Ùƒ Ø§Ù„Ù…Ø­ÙˆØ± f (1/s).")]
+        [SerializeField, Min(0f)] private float pivotFriction = 0.02f;
+        [Header("Bucket")]
+        [SerializeField, Min(0.001f)] private float mass = 3.0f;
+        [SerializeField, Min(0f)] private float bucketRadius = 0.13f;
+        [Tooltip("Cd. ~0.47 ÙƒØ±Ø©ØŒ ~1.0 Ø¯Ù„Ùˆ Ù…ÙØªÙˆØ­.")]
+        [SerializeField, Min(0f)] private float dragCoefficient = 1.0f;
+        [Header("Integration (Ø§Ù„ÙˆØ¶Ø¹ Ø§Ù„Ù…Ø³ØªÙ‚Ù„ ÙÙ‚Ø·)")]
+        [SerializeField, Min(0.0001f)] private float fixedStep = 0.004f;
+        private double th, ph, thDot, phDot;
+        private double accumulator;
+        private RopeState state;
+        private const double MinSin = 1e-3;
+        private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
+        public double Theta           => th;
+        public double Phi             => ph;
+        public double ThetaDot        => thDot;
+        public double PhiDot          => phDot;
+        public double EffectiveLength => state.EffLength > 0 ? state.EffLength : length;
+        public float  Mass            => mass;
+        public double Tension         => state.Tension;
+        public double KineticEnergy   => state.KineticEnergy;
+        public double PotentialEnergy => state.PotentialEnergy;
+        public double ElasticEnergy   => state.ElasticEnergy;
+        public double TotalEnergy     => state.TotalEnergy;
+        public float StartThetaRad    => startTheta    * Mathf.Deg2Rad;
+        public float StartPhiRad      => startPhi      * Mathf.Deg2Rad;
+        public float StartThetaDotRad => startThetaDot * Mathf.Deg2Rad;
+        public float StartPhiDotRad   => startPhiDot   * Mathf.Deg2Rad;
+        private void Start()
+        {
+            if (pivot == null || bob == null)
+            {
+                Debug.LogError($"{nameof(SphericalPendulum)}: assign 'pivot' and 'bob'.", this);
+                enabled = false;
+                return;
+            }
+            Relaunch();
+            if (driveBucket) RenderPendulum();
+        }
+        public void ApplyConfig(RopeConfig c)
+        {
+            length          = c.length;
+            startTheta      = c.startTheta;
+            startPhi        = c.startPhi;
+            startThetaDot   = c.startThetaDot;
+            startPhiDot     = c.startPhiDot;
+            gravity         = c.gravity;
+            airDensity      = c.airDensity;
+            pivotFriction   = c.pivotFriction;
+            mass            = c.bucketMass;
+            bucketRadius    = c.bucketRadius;
+            dragCoefficient = c.bucketDragCoefficient;
+            fixedStep       = c.fixedStep;
+            Relaunch();
+        }
+        [ContextMenu("Relaunch")]
+        public void Relaunch()
+        {
+            th    = startTheta    * Mathf.Deg2Rad;
+            ph    = startPhi      * Mathf.Deg2Rad;
+            thDot = startThetaDot * Mathf.Deg2Rad;
+            phDot = startPhiDot   * Mathf.Deg2Rad;
+            state = new RopeState(th, ph, thDot, phDot, length, 0, 0, 0, 0);
+            accumulator = 0;
+        }
+        public void PushState(in RopeState s)
+        {
+            state = s;
+            th = s.Theta; ph = s.Phi; thDot = s.ThetaDot; phDot = s.PhiDot;
+        }
+        public void SetStateFromWorld(double theta, double phi,
+            double thetaDot, double phiDot, double effLen)
+            => PushState(new RopeState(theta, phi, thetaDot, phiDot, effLen, 0, 0, 0, 0));
+        private void Update()
+        {
+if (externallyDriven) return;
+            accumulator += Time.deltaTime;
+            if (accumulator > 0.25) accumulator = 0.25;
+            while (accumulator >= fixedStep)
+            {
+                Integrate(fixedStep);
+                accumulator -= fixedStep;
+            }
+            state = new RopeState(th, ph, thDot, phDot, length, 0, 0, 0, 0);
+            RenderPendulum();
+        }
+        private void Derivatives(
+            double thetaIn, double thetaDotIn, double phiDotIn,
+            out double dTheta, out double dThetaDot, out double dPhiDot)
+        {
+            double s = Math.Sin(thetaIn);
+            double c = Math.Cos(thetaIn);
+            double sSafe = Math.Abs(s) < MinSin ? Math.Sign(s == 0 ? 1 : s) * MinSin : s;
+            double speed = length * Math.Sqrt(thetaDotIn * thetaDotIn + s * s * phiDotIn * phiDotIn);
+            double damp  = (0.5 * airDensity * dragCoefficient * FrontalArea / mass) * speed
+                           + pivotFriction;
+            dTheta    = thetaDotIn;
+            dThetaDot = phiDotIn * phiDotIn * s * c
+                        - (gravity / length) * s
+                        - damp * thetaDotIn;
+            dPhiDot   = -2.0 * thetaDotIn * phiDotIn * (c / sSafe)
+                        - damp * phiDotIn;
+        }
+        private void Integrate(double h)
+        {
+            Derivatives(th,              thDot,              phDot,
+                out double k1Th, out double k1Thd, out double k1Phd);
+            double k1Ph = phDot;
+            Derivatives(th + 0.5*h*k1Th, thDot + 0.5*h*k1Thd, phDot + 0.5*h*k1Phd,
+                out double k2Th, out double k2Thd, out double k2Phd);
+            double k2Ph = phDot + 0.5*h*k1Phd;
+            Derivatives(th + 0.5*h*k2Th, thDot + 0.5*h*k2Thd, phDot + 0.5*h*k2Phd,
+                out double k3Th, out double k3Thd, out double k3Phd);
+            double k3Ph = phDot + 0.5*h*k2Phd;
+            Derivatives(th + h*k3Th,     thDot + h*k3Thd,     phDot + h*k3Phd,
+                out double k4Th, out double k4Thd, out double k4Phd);
+            double k4Ph = phDot + h*k3Phd;
+            th    += h / 6.0 * (k1Th  + 2*k2Th  + 2*k3Th  + k4Th);
+            thDot += h / 6.0 * (k1Thd + 2*k2Thd + 2*k3Thd + k4Thd);
+            ph    += h / 6.0 * (k1Ph  + 2*k2Ph  + 2*k3Ph  + k4Ph);
+            phDot += h / 6.0 * (k1Phd + 2*k2Phd + 2*k3Phd + k4Phd);
+        }
+        private void RenderPendulum()
+        {
+            if (!driveBucket) return;
+            bob.position = pivot.position + SphericalToCartesian(th, ph, length);
+        }
+        private static Vector3 SphericalToCartesian(double theta, double phi, double l)
+        {
+            float s  = (float)Math.Sin(theta);
+            float c  = (float)Math.Cos(theta);
+            float cp = (float)Math.Cos(phi);
+            float sp = (float)Math.Sin(phi);
+            return new Vector3((float)l * s * cp, -(float)l * c, -(float)l * s * sp);
+        }
+        private void OnDrawGizmosSelected()
+        {
+            if (pivot == null) return;
+            Gizmos.color = new Color(0.2f, 0.6f, 1f, 0.12f);
+            Gizmos.DrawWireSphere(pivot.position, length);
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawSphere(pivot.position, 0.03f);
+        }
+    }
+}
+
+
+
+// ==========================================
+// FILE: RopeConfigLoaderEditor.cs
+// ==========================================
+#if UNITY_EDITOR
+using UnityEditor;
+using UnityEngine;
+namespace onlyone.Editor
+{ 
+    [CustomEditor(typeof(RopeConfigLoader))]
+    public sealed class RopeConfigLoaderEditor : UnityEditor.Editor
+    {
+        public override void OnInspectorGUI()
+        { 
+            serializedObject.Update();
+            DrawPropertiesExcluding(serializedObject, "selected", "m_Script");
+            serializedObject.ApplyModifiedProperties();
+            var loader = (RopeConfigLoader)target;
+            string[] names = loader.GetConfigNames();
+            EditorGUILayout.Space(6);
+            EditorGUI.BeginChangeCheck();
+            int newSel = EditorGUILayout.Popup("current experiment", Mathf.Clamp(loader.Selected, 0, names.Length - 1), names);
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(loader, "Select Rope Config");
+                loader.Selected = newSel;
+                EditorUtility.SetDirty(loader);
+                loader.ApplySelectedIfChanged();   
+            }
+            using (new EditorGUI.DisabledScope(!Application.isPlaying))
+            {
+                if (GUILayout.Button("apply Now in the Run"))
+                    loader.Apply(loader.Selected);
+            }
+            if (!Application.isPlaying)
+                EditorGUILayout.HelpBox("The selected experiment is applied automatically on Play, " +
+                                        "or immediately if you change the selection while playing.", MessageType.None);
+        }
+    }
+}
+#endif
+
+
+

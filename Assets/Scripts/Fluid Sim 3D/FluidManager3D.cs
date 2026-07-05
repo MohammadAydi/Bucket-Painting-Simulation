@@ -6,9 +6,12 @@ public class FluidManager3D : MonoBehaviour
     [Header("References")]
     [SerializeField] FluidBoundary3D boundaryVolume;
     [SerializeField] ParticleSettings settings;
-    FluidModel _fluidModel;
-    [SerializeField] ComputeShader _SPHCompute;
+    [SerializeField] ComputeShader fluidComputeShader;
     [SerializeField] Material particleMaterial;
+    [SerializeField] BucketGenerator bucket;
+    [SerializeField] BucketFluidCollision3D bucketCollision;
+
+    FluidModel _fluidModel;
 
     [Header("Time Step")] public float normalTimeScale = 1;
     public float slowTimeScale = 0.1f;
@@ -96,6 +99,10 @@ public class FluidManager3D : MonoBehaviour
         for (int i = 0; i < iterationsPerFrame; i++)
         {
             _fluidModel.Step();
+            if (bucketCollision != null && bucketCollision.enabled)
+            {
+                bucketCollision.ResolveCollisions();
+            }
         }
 
         if (!_initialized || boundaryVolume == null) return;
@@ -113,13 +120,18 @@ public class FluidManager3D : MonoBehaviour
 
     void InitializeSystems()
     {
-        if (settings == null || _SPHCompute == null || boundaryVolume == null) return;
+        if (settings == null || fluidComputeShader == null || boundaryVolume == null) return;
 
         DisposeSystems();
 
+        if (bucket == null)
+            bucket = FindAnyObjectByType<BucketGenerator>();
+        if (bucketCollision == null)
+            bucketCollision = FindAnyObjectByType<BucketFluidCollision3D>();
+
         _spawnSystem = new SpawnSystem3D(settings);
-        SpawnData3D spawnData = _spawnSystem.SpawnParticles(boundaryVolume);
-        _fluidModel = new FluidModel(spawnData, settings, _SPHCompute);
+        SpawnData3D spawnData = (bucket != null) ? _spawnSystem.SpawnParticlesInBucket(bucket) : _spawnSystem.SpawnParticles(boundaryVolume);
+        _fluidModel = new FluidModel(spawnData, settings, fluidComputeShader);
         _fluidModel.SetSmoothingConstant(settings.smoothingRadius);
         if (particleMaterial == null)
             particleMaterial = new Material(Shader.Find("Fluid/ParticleCircle3D"));

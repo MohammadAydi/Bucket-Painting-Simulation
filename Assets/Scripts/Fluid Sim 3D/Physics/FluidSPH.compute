@@ -1,0 +1,117 @@
+#pragma kernel GravityForce
+#pragma kernel PositionPredictor
+#pragma kernel BuildSpatialLookup 
+#pragma kernel Reorder 
+#pragma kernel ReorderCopyBack 
+#pragma kernel DensityCalculator 
+#pragma kernel WCSPressureSolver
+#pragma kernel NearPressureSolver
+#pragma kernel StandardViscositySolver 
+#pragma kernel StandardSurfaceTension 
+#pragma kernel Integrator 
+
+#include "UnityCG.cginc" 
+#include "FluidMath.hlsl" 
+
+static const int NumThreads = 256; 
+static const uint UINT_MAX = 0xFFFFFFFF; 
+
+// ─────────────────────────────────────────────────────────────
+// Buffers & Variables
+// ─────────────────────────────────────────────────────────────
+RWStructuredBuffer<float3> _Positions; 
+RWStructuredBuffer<float3> _PredictedPositions; 
+RWStructuredBuffer<float3> _Velocities; 
+RWStructuredBuffer<float2> _Densities; 
+RWStructuredBuffer<uint> SpatialKeys; 
+RWStructuredBuffer<uint> SortedIndices; 
+RWStructuredBuffer<uint> SpatialOffsets; 
+
+RWStructuredBuffer<float3> SortTarget_Positions; 
+RWStructuredBuffer<float3> SortTarget_PredictedPositions; 
+RWStructuredBuffer<float3> SortTarget_Velocities; 
+
+uint _ParticleCount; 
+float _DeltaTime; 
+float _Mass; 
+float _Gravity; 
+float _SmoothingRadius; 
+float _PressureMultiplier; 
+float _TargetDensity; 
+float _ParticleRadius; 
+float _CollisionDamping; 
+float _NearPressureMultiplier; 
+
+float3 _BoundaryLocalMin; 
+float3 _BoundaryLocalMax; 
+float4x4 _BoundaryWorldToLocal; 
+float4x4 _BoundaryLocalToWorld; 
+
+float3 _InteractionInputPos; 
+float _InteractionRadius; 
+float _InteractionStrength; 
+
+float _ViscosityCoeff; 
+float _SurfaceTensionCoeff; 
+float _SurfaceTensionThreshold; 
+
+static const int3 CellOffsets[27] =
+{
+    int3(-1, -1, -1), int3(0, -1, -1), int3(1, -1, -1),
+    int3(-1, 0, -1), int3(0, 0, -1), int3(1, 0, -1),
+    int3(-1, 1, -1), int3(0, 1, -1), int3(1, 1, -1),
+    int3(-1, -1, 0), int3(0, -1, 0), int3(1, -1, 0),
+    int3(-1, 0, 0), int3(0, 0, 0), int3(1, 0, 0),
+    int3(-1, 1, 0), int3(0, 1, 0), int3(1, 1, 0),
+    int3(-1, -1, 1), int3(0, -1, 1), int3(1, -1, 1),
+    int3(-1, 0, 1), int3(0, 0, 1), int3(1, 0, 1),
+    int3(-1, 1, 1), int3(0, 1, 1), int3(1, 1, 1)
+};
+
+// ─────────────────────────────────────────────────────────────
+// Module Includes
+// ─────────────────────────────────────────────────────────────
+#include "../Physics/Gravity/GravityForce.hlsl"
+#include "../Physics/PositionPredictor/PositionPredictor.hlsl"
+#include "../Physics/NeighborsSearching/NeighborsSearching.hlsl"
+#include "../Physics/Density/DensityCalc.hlsl"
+#include "../Physics/Pressure/PressureSolver.hlsl"
+#include "../Physics/Viscosity/ViscositySolver.hlsl"
+#include "../Physics/SurfaceTension/SurfaceTensionSolver.hlsl"
+#include "../Physics/Integrator//Integrate.hlsl"
+
+// ─────────────────────────────────────────────────────────────
+// Kernel Definitions
+// ─────────────────────────────────────────────────────────────
+[numthreads(NumThreads, 1, 1)]
+void GravityForce(uint3 id : SV_DispatchThreadID) { ApplyGravity(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void PositionPredictor(uint3 id : SV_DispatchThreadID) { PredictPositions(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void BuildSpatialLookup(uint3 id : SV_DispatchThreadID) { BuildSpatialLookupImpl(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void Reorder(uint3 id : SV_DispatchThreadID) { ReorderImpl(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void ReorderCopyBack(uint3 id : SV_DispatchThreadID) { ReorderCopyBackImpl(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void DensityCalculator(uint3 id : SV_DispatchThreadID) { CalculateDensity(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void WCSPressureSolver(uint3 id : SV_DispatchThreadID) { ApplyWCSPressure(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void NearPressureSolver(uint3 id : SV_DispatchThreadID) { ApplyNearPressure(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void StandardViscositySolver(uint3 id : SV_DispatchThreadID) { ApplyViscosity(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void StandardSurfaceTension(uint3 id : SV_DispatchThreadID) { ApplySurfaceTension(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void Integrator(uint3 id : SV_DispatchThreadID) { ApplyIntegration(id); }

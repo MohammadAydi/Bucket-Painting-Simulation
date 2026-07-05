@@ -4,10 +4,7 @@ using UnityEngine;
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class BucketGenerator : MonoBehaviour
 {
-    public enum BucketShape { Circular, Triangular, Square }
 
-    [Header("Bucket Shape")]
-    public BucketShape shape = BucketShape.Circular;
 
     [Header("Bucket Dimensions")]
     public float topRadius = 0.13f;
@@ -74,12 +71,7 @@ public class BucketGenerator : MonoBehaviour
             }
         }
 
-        switch (shape)
-        {
-            case BucketShape.Triangular: segments = 3; break;
-            case BucketShape.Square: segments = 4; break;
-            case BucketShape.Circular: if (segments < 8) segments = 8; break;
-        }
+        if (segments < 8) segments = 8;
 
         GenerateBucket();
     }

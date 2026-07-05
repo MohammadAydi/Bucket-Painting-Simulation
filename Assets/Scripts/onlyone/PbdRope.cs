@@ -24,12 +24,12 @@ namespace onlyone
                  "فالتقسيم يتفوق على رفع التكرارات في حفظ الطاقة.")]
         [SerializeField, Range(1, 8)] private int substeps = 4;
         [SerializeField, Range(1, 80)] private int constraintIterations = 8;
-        [Tooltip("امتثال قيد المسافة α (m/N). XPBD Eq.24: α̃ = α/dt².")]
+         
         [SerializeField, Min(0f)] private float compliance = 0.00004f;
         [Tooltip("تخميد داخلي σ (1/s): v ← v·exp(−σ·dt). مستقل عن حجم الخطوة. " +
                  "(نموذج لزج قياسي — ليس من DER/XPBD.)")]
         [SerializeField, Min(0f)] private float internalDampingRate = 0.05f;
-        [Tooltip("حاجز أمان ضد الانفجار العددي فقط.")]
+        
         [SerializeField, Range(1f, 1.4f)] private float stretchLimit = 1.2f;
         [Tooltip("β̃ لقيد المسافة (XPBD Eq.26): يخمد تشوّه القطعة دون تخميد الحركة المكانية.")]
         [SerializeField, Min(0f)] private float stretchDampingBeta;
@@ -85,7 +85,6 @@ namespace onlyone
         [SerializeField, Range(0f, 0.5f)] private float poissonRatio = 0.4f;
 
         [SerializeField] private bool breakable = true;
-
  
         [SerializeField, Min(1000f)] private float ultimateStress = 6e7f;
  
@@ -113,7 +112,6 @@ namespace onlyone
         private float[] invMass, lambda, lambdaBend;
         private float accumulator; private bool ready;
         private float bucketTension;         
-        private float lastSubstep;          
 
         private float[]   twist, twistPrev, invInertia, lambdaTw, refTwist;
         private Vector3[] tangent, prevTangent, refDir;
@@ -180,20 +178,19 @@ namespace onlyone
         private void DeriveFromMaterialProperties()
         {
             if (!deriveFromMaterial) return;
-
+    
             float area = Mathf.PI * ropeRadius * ropeRadius;         
-            float I    = (Mathf.PI / 4f) * Mathf.Pow(ropeRadius, 4);     
-            float J    = (Mathf.PI / 2f) * Mathf.Pow(ropeRadius, 4);     
-            float G    = youngModulus / (2f * (1f + poissonRatio));      
+            float I = (Mathf.PI / 4f) * Mathf.Pow(ropeRadius, 4);
+            float j = 2f * I;   
+            float g    = youngModulus / (2f * (1f + poissonRatio));      
  
             linearDensity = density * area;
  
             compliance = segLen / Mathf.Max(1e-9f, youngModulus * area);
-
              
             bendingStiffness = youngModulus * I / Mathf.Max(1e-9f, segLen);
  
-            torsionalStiffness = G * J / Mathf.Max(1e-9f, segLen);
+            torsionalStiffness = g * j / Mathf.Max(1e-9f, segLen);
         }
 
         private void InitializeRope()
@@ -211,16 +208,14 @@ namespace onlyone
 
             if (pendulum)
             {
-                bool coupled = dynamicBucket;
-                pendulum.driveBucket      = !coupled;
-                pendulum.externallyDriven = coupled;
+                pendulum.driveBucket      = !dynamicBucket;
+                pendulum.externallyDriven = dynamicBucket;
             }
 
             lr = GetComponent<LineRenderer>();
 
             n = segments + 1;
-            segLen = ropeLength / segments;
-            lastSubstep = fixedStep / substeps;
+            segLen = ropeLength / segments; 
 
             pos        = new Vector3[n];
             prev       = new Vector3[n];
@@ -253,8 +248,7 @@ namespace onlyone
             accumulator += Time.deltaTime;
             if (accumulator > 0.25f) accumulator = 0.25f;
 
-            float h = fixedStep / substeps;
-            lastSubstep = h;
+            float h = fixedStep / substeps; 
             while (accumulator >= fixedStep)
             {
                 for (int s = 0; s < substeps; s++)
@@ -374,13 +368,14 @@ namespace onlyone
         }
 
         private void Step(float dt)
-        {
-            float alphaStretch = compliance / (dt * dt); 
-            bool solveBending = enableBending && bendingStiffness > 1e-9f;
-            float alphaBend   = solveBending ? (1f / bendingStiffness) / (dt * dt) : 0f;
-
+        { 
+            float dt2 = dt * dt;
+            float alphaStretch = compliance / dt2;
+            bool  solveBending  = enableBending && bendingStiffness > 1e-9f;
+            float alphaBend     = solveBending ? (1f / bendingStiffness) / dt2 : 0f;
+       
             Array.Clear(lambda, 0, segments);
-            Array.Clear(lambdaBend, 0, n);
+            if (solveBending) Array.Clear(lambdaBend, 0, n);
 
             float retention = Mathf.Exp(-internalDampingRate * dt);
             Vector3 accDt2 = (Vector3.down * gravity + wind) * (dt * dt);
@@ -432,11 +427,8 @@ namespace onlyone
  
             float bucketMassEff = dynamicBucket ? bucketMass : Mathf.Max(1e-9f, linearDensity * segLen);
             Vector3 bucketCorrection  = pos[n - 1] - bucketPredicted;
-            Vector3 ropeForceOnBucket = bucketCorrection * (bucketMassEff / (dt * dt));
+            Vector3 ropeForceOnBucket = bucketCorrection * (bucketMassEff / dt2);
             bucketTension = ropeForceOnBucket.magnitude;
-            Debug.Log(
-                $"Weight={bucketMass * gravity:F1} N   " +
-                $"Tension={CurrentTensionN:F1} N");
  
             float area = Mathf.PI * ropeRadius * ropeRadius;
             float maxStress = 0f;
@@ -472,10 +464,6 @@ namespace onlyone
             CurrentSafetyFactor = (maxStress > 1f) ? (ultimateStress / maxStress) : float.PositiveInfinity;
             EffectiveRopeLength = Vector3.Distance(pos[0], pos[n - 1]);  
             
-            Debug.Log(
-                $"Stress={maxStress/1e6f:F2} MPa   " +
-                $"Limit={(ultimateStress/safetyFactor)/1e6f:F2} MPa   " +
-                $"Tension={CurrentTensionN:F1} N");
             if (breakable && !IsBroken)
             {
                 float allowStress = ultimateStress / Mathf.Max(1f, safetyFactor);

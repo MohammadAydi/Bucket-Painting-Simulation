@@ -2,64 +2,49 @@ using System;
 using UnityEngine;
 
 namespace onlyone
-{
+{ 
     [DisallowMultipleComponent]
     public class SphericalPendulum : MonoBehaviour
     {
         [Header("Scene References")]
-        [Tooltip("Fixed suspension point. The pendulum hangs from this world position.")]
         [SerializeField] private Transform pivot;
-
-        [Tooltip("The bob (ball / bucket). Its position is driven every frame in standalone mode.")]
         [SerializeField] private Transform bob;
 
-        [Header("Suspension (التعليق)")]
-        [Tooltip("Rope length l (meters).")]
+        [Header("Suspension")]
+        [Tooltip("Rope length l (meters). يُستخدم للرسم في الوضع المستقل فقط.")]
         [SerializeField, Min(0.01f)] public float length = 1.2f;
 
-        [Tooltip("يُطفئه PbdRope تلقائياً عند الاقتران، فيتوقّف النواس عن تحريك الدلو.")]
+        [Tooltip("يُطفئه PbdRope عند الاقتران، فيتوقّف النواس عن تحريك الدلو.")]
         public bool driveBucket = true;
 
-        [Tooltip("يُضبط تلقائياً من PbdRope عند الاقتران: يتوقف النواس عن التكامل " +
-                 "ويتلقّى حالته من ديناميكا الحبل (الحبل هو مصدر الحقيقة الوحيد).")]
-        [HideInInspector] public bool externallyDriven = false;
+        [Tooltip("يضبطه PbdRope: true = مُراقِب (الحبل يقود)، false = حلّال RK4 مستقل.")]
+        [HideInInspector] public bool externallyDriven;
 
-        [Header("Motion - initial conditions (الحركة)")]
-        [Tooltip("Initial polar angle theta_0 from the downward vertical (deg).")]
+        [Header("Initial Conditions (تُقرأ من الحبل عند الإطلاق)")]
         [SerializeField] private float startTheta = 60f;
+        [SerializeField] private float startPhi;
+        [SerializeField] private float startThetaDot;
+        [Tooltip("0 = تأرجح مستوٍ؛ غير صفر = تأرجح مخروطي.")]
+        [SerializeField] private float startPhiDot;
 
-        [Tooltip("Initial azimuthal angle phi_0 (deg).")]
-        [SerializeField] private float startPhi = 0f;
-
-        [Tooltip("Initial polar angular velocity theta'_0 (deg/s).")]
-        [SerializeField] private float startThetaDot = 0f;
-
-        [Tooltip("Initial azimuthal angular velocity phi'_0 (deg/s). " +
-                 "0 = flat swing; non-zero = conical / orbiting swing.")]
-        [SerializeField] private float startPhiDot = 0f;
-
-        [Header("Environment (البيئة)")]
+        [Header("Environment (الوضع المستقل فقط)")]
         [SerializeField] private float gravity = 9.81f;
         [SerializeField, Min(0f)] private float airDensity = 1.225f;
-
-        [Tooltip("Pivot/rope friction f (1/s). Small constant damping at the suspension point.")]
+        [Tooltip("احتكاك المحور f (1/s).")]
         [SerializeField, Min(0f)] private float pivotFriction = 0.02f;
 
-        [Header("Bucket / Bob (الدلو)")]
+        [Header("Bucket")]
         [SerializeField, Min(0.001f)] private float mass = 3.0f;
-
-        [Tooltip("Bucket radius (m). Frontal area used for drag = pi * r^2.")]
         [SerializeField, Min(0f)] private float bucketRadius = 0.13f;
-
-        [Tooltip("Drag coefficient Cd. ~0.47 sphere, ~1.0 open bucket, ~1.05 cube.")]
+        [Tooltip("Cd. ~0.47 كرة، ~1.0 دلو مفتوح.")]
         [SerializeField, Min(0f)] private float dragCoefficient = 1.0f;
 
-        [Header("Integration")]
+        [Header("Integration (الوضع المستقل فقط)")]
         [SerializeField, Min(0.0001f)] private float fixedStep = 0.004f;
  
         private double th, ph, thDot, phDot;
         private double accumulator;
-        private double effectiveLength;
+        private RopeState state;
 
         private const double MinSin = 1e-3;
         private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
@@ -68,8 +53,14 @@ namespace onlyone
         public double Phi             => ph;
         public double ThetaDot        => thDot;
         public double PhiDot          => phDot;
-        public double EffectiveLength => effectiveLength;
+        public double EffectiveLength => state.effLength > 0 ? state.effLength : length;
         public float  Mass            => mass;
+ 
+        public double Tension         => state.tension;
+        public double KineticEnergy   => state.kineticEnergy;
+        public double PotentialEnergy => state.potentialEnergy;
+        public double ElasticEnergy   => state.elasticEnergy;
+        public double TotalEnergy     => state.totalEnergy;
 
         public float StartThetaRad    => startTheta    * Mathf.Deg2Rad;
         public float StartPhiRad      => startPhi      * Mathf.Deg2Rad;
@@ -85,31 +76,50 @@ namespace onlyone
                 return;
             }
             Relaunch();
-            RenderPendulum();
+            if (driveBucket) RenderPendulum();
         }
 
-        private void OnValidate()
+        public void ApplyConfig(RopeConfig c)
         {
-            if (pivot == null || bob == null || Application.isPlaying) return;
-            th = startTheta * Mathf.Deg2Rad;
-            ph = startPhi   * Mathf.Deg2Rad;
-            bob.position = pivot.position + SphericalToCartesian(th, ph, length);
+            length          = c.length;
+            startTheta      = c.startTheta;
+            startPhi        = c.startPhi;
+            startThetaDot   = c.startThetaDot;
+            startPhiDot     = c.startPhiDot;
+            gravity         = c.gravity;
+            airDensity      = c.airDensity;
+            pivotFriction   = c.pivotFriction;
+            mass            = c.bucketMass;
+            bucketRadius    = c.bucketRadius;
+            dragCoefficient = c.bucketDragCoefficient;
+            fixedStep       = c.fixedStep;
+            Relaunch();
         }
 
-        [ContextMenu("Relaunch (إعادة التجربة)")]
+        [ContextMenu("Relaunch")]
         public void Relaunch()
         {
             th    = startTheta    * Mathf.Deg2Rad;
             ph    = startPhi      * Mathf.Deg2Rad;
             thDot = startThetaDot * Mathf.Deg2Rad;
             phDot = startPhiDot   * Mathf.Deg2Rad;
-            effectiveLength = length;
+            state = new RopeState(th, ph, thDot, phDot, length, 0, 0, 0, 0);
             accumulator = 0;
         }
-
+ 
+        public void PushState(in RopeState s)
+        {
+            state = s;
+            th = s.theta; ph = s.phi; thDot = s.thetaDot; phDot = s.phiDot;
+        }
+ 
+        public void SetStateFromWorld(double theta, double phi,
+            double thetaDot, double phiDot, double effLen)
+            => PushState(new RopeState(theta, phi, thetaDot, phiDot, effLen, 0, 0, 0, 0));
+ 
         private void Update()
         {
-            if (externallyDriven) return;   
+            if (externallyDriven) return;   // الحبل يقود، لا تكامل هنا.
 
             accumulator += Time.deltaTime;
             if (accumulator > 0.25) accumulator = 0.25;
@@ -118,9 +128,10 @@ namespace onlyone
                 Integrate(fixedStep);
                 accumulator -= fixedStep;
             }
+            state = new RopeState(th, ph, thDot, phDot, length, 0, 0, 0, 0);
             RenderPendulum();
         }
- 
+
         private void Derivatives(
             double thetaIn, double thetaDotIn, double phiDotIn,
             out double dTheta, out double dThetaDot, out double dPhiDot)
@@ -165,18 +176,9 @@ namespace onlyone
             phDot += h / 6.0 * (k1Phd + 2*k2Phd + 2*k3Phd + k4Phd);
         }
 
-        // ── Feedback: rope -> pendulum (called by PbdRope every physics step) ────
-        public void SetStateFromWorld(double theta, double phi,
-            double thetaDot, double phiDot, double effLen)
-        {
-            th = theta;       ph = phi;
-            thDot = thetaDot; phDot = phiDot;
-            effectiveLength = effLen;
-        }
-
         private void RenderPendulum()
         {
-            if (!driveBucket) return;   
+            if (!driveBucket) return;
             bob.position = pivot.position + SphericalToCartesian(th, ph, length);
         }
 
@@ -196,6 +198,20 @@ namespace onlyone
             Gizmos.DrawWireSphere(pivot.position, length);
             Gizmos.color = Color.yellow;
             Gizmos.DrawSphere(pivot.position, 0.03f);
+        }
+        private void OnGUI()
+        {
+            GUILayout.BeginArea(new Rect(10, 10, 300, 180), GUI.skin.box);
+
+            GUILayout.Label($"Effective Length : {EffectiveLength:F4} m");
+            GUILayout.Label($"Theta            : {Theta * Mathf.Rad2Deg:F2}°");
+            GUILayout.Label($"Phi              : {Phi * Mathf.Rad2Deg:F2}°");
+            GUILayout.Label($"ThetaDot         : {ThetaDot:F3} rad/s");
+            GUILayout.Label($"PhiDot           : {PhiDot:F3} rad/s");
+            GUILayout.Label($"Tension : {Tension:F2} N");
+            GUILayout.Label($"Energy  : {TotalEnergy:F3} J");
+
+            GUILayout.EndArea();
         }
     }
 }

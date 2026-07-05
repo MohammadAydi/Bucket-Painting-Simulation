@@ -109,7 +109,7 @@ MonoBehaviour:
     strength: 1
     diffStrength: 6
     iterations: 23
-  paintColor: {r: 0.7735849, g: 0.22236265, b: 0.025542913, a: 1}
+  paintColor: {r: 0, g: 0.026756609, b: 0.8867924, a: 1}
   specularStrength: 0.8
   specularShininess: 64
   reflectionStrength: 0.15

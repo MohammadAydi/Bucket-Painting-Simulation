@@ -1,7 +1,7 @@
 {
   "name": "نايلون مضفور خفيف المرونة",
   "gravity": 9.81, "fixedStep": 0.004,
-  "bucketMass": 29.6, "bucketRadius": 0.13,
+  "bucketMass": 3.0, "bucketRadius": 0.13,
   "airDensity": 1.225, "bucketDragCoefficient": 1.0,
   "length": 1.2, "startTheta": 60.0, "startPhi": 0.0,
   "startThetaDot": 0.0, "startPhiDot": 0.0, "pivotFriction": 0.02,

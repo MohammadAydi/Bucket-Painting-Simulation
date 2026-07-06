@@ -17,7 +17,10 @@ Shader "Fluid/ParticleDepth3D_URP"
 {
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" }
+        Tags
+        {
+            "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline"
+        }
         Cull Off
         ZWrite On
         ZTest LEqual
@@ -25,7 +28,10 @@ Shader "Fluid/ParticleDepth3D_URP"
         Pass
         {
             Name "FluidParticleDepth"
-            Tags { "LightMode" = "UniversalForward" }
+            Tags
+            {
+                "LightMode" = "UniversalForward"
+            }
 
             HLSLPROGRAM
             #pragma vertex   vert
@@ -43,13 +49,13 @@ Shader "Fluid/ParticleDepth3D_URP"
             struct Attributes
             {
                 float3 positionOS : POSITION;
-                float2 uv         : TEXCOORD0;
+                float2 uv : TEXCOORD0;
             };
 
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float2 uv         : TEXCOORD0;
+                float2 uv : TEXCOORD0;
                 float3 positionWS : TEXCOORD1;
             };
 
@@ -63,17 +69,17 @@ Shader "Fluid/ParticleDepth3D_URP"
                 // Billboard the quad in camera right / up (world space)
                 // UNITY_MATRIX_I_V gives the camera-to-world matrix in URP.
                 float3 camRight = UNITY_MATRIX_I_V._m00_m10_m20;
-                float3 camUp    = UNITY_MATRIX_I_V._m01_m11_m21;
+                float3 camUp = UNITY_MATRIX_I_V._m01_m11_m21;
 
                 // scale * 2 because quad verts are in [-0.5, +0.5]
-                float3 offset   = IN.positionOS * scale * 2.0;
+                float3 offset = IN.positionOS * scale * 2.0;
                 float3 worldPos = worldCentre
-                                + camRight * offset.x
-                                + camUp    * offset.y;
+                    + camRight * offset.x
+                    + camUp * offset.y;
 
                 OUT.positionCS = mul(UNITY_MATRIX_VP, float4(worldPos, 1.0));
                 OUT.positionWS = worldPos;
-                OUT.uv         = IN.uv;
+                OUT.uv = IN.uv;
                 return OUT;
             }
 
@@ -84,7 +90,7 @@ Shader "Fluid/ParticleDepth3D_URP"
             {
                 // Convert linear depth to 0-1 range between near/far planes
                 float depth01 = (linearDepth - _ProjectionParams.y)
-                              / (_ProjectionParams.z - _ProjectionParams.y);
+                    / (_ProjectionParams.z - _ProjectionParams.y);
                 // Invert the perspective divide
                 return (1.0 - depth01 * _ZBufferParams.y) / (depth01 * _ZBufferParams.x);
             }
@@ -94,18 +100,18 @@ Shader "Fluid/ParticleDepth3D_URP"
             {
                 // Circular disc mask — discard corners outside the sphere cross-section
                 float2 centreOffset = (IN.uv - 0.5) * 2.0;
-                float  sqrDst       = dot(centreOffset, centreOffset);
+                float sqrDst = dot(centreOffset, centreOffset);
                 clip(1.0 - sqrDst); // discard if outside unit circle
 
                 // Reconstruct sphere front surface depth
-                float z           = sqrt(1.0 - sqrDst);
-                float dcam        = length(IN.positionWS - _WorldSpaceCameraPos);
+                float z = sqrt(1.0 - sqrDst);
+                float dcam = length(IN.positionWS - _WorldSpaceCameraPos);
                 float linearDepth = dcam - z * scale;
 
-                outDepth = LinearDepthToClipDepth(linearDepth);
-
-                // Pack: r = blurrable depth, a = reference depth (never blurred)
-                return float4(linearDepth, 0, 0, linearDepth);
+                float3 viewPos = mul(UNITY_MATRIX_V, float4(IN.positionWS, 1.0)).xyz;
+                float eyeDepth = -viewPos.z - z * scale; // camera looks down -Z in view space
+                outDepth = LinearDepthToClipDepth(eyeDepth);
+                return float4(eyeDepth, 0, 0, eyeDepth);
             }
             ENDHLSL
         }

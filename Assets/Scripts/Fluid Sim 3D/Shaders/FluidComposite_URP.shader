@@ -2,8 +2,11 @@ Shader "Fluid/FluidComposite_URP"
 {
     SubShader
     {
-        Tags { "RenderPipeline" = "UniversalPipeline" }
-        Cull Off  ZWrite Off  ZTest Always
+        Tags
+        {
+            "RenderPipeline" = "UniversalPipeline"
+        }
+        Cull Off ZWrite Off ZTest Always
 
         // ── Pass 0: Shade fluid pixels into outRT ─────────────────────────────
         Pass
@@ -19,19 +22,21 @@ Shader "Fluid/FluidComposite_URP"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 
-            TEXTURE2D(_CompTex);   SAMPLER(sampler_CompTex);
-            TEXTURE2D(_NormalTex); SAMPLER(sampler_NormalTex);
+            TEXTURE2D(_CompTex);
+            SAMPLER(sampler_CompTex);
+            TEXTURE2D(_NormalTex);
+            SAMPLER(sampler_NormalTex);
 
             float4 _PaintColor;
-            float  _SpecularStrength;
-            float  _Shininess;
-            float  _ReflectStrength;
+            float _SpecularStrength;
+            float _Shininess;
+            float _ReflectStrength;
 
             // ── New lighting controls (set from C# inspector) ─────────────────
-            float  _AmbientStrength;     // minimum brightness on fully-shadowed surfaces
-            float  _UseHalfLambert;      // 1 = soft wrap, 0 = classic hard Lambert
-            float  _FillLightStrength;   // secondary upward fill light intensity
-            float3 _FillLightColor;      // colour of the fill light (e.g. warm floor bounce)
+            float _AmbientStrength; // minimum brightness on fully-shadowed surfaces
+            float _UseHalfLambert; // 1 = soft wrap, 0 = classic hard Lambert
+            float _FillLightStrength; // secondary upward fill light intensity
+            float3 _FillLightColor; // colour of the fill light (e.g. warm floor bounce)
 
             float3 WorldViewDir(float2 uv)
             {
@@ -43,15 +48,15 @@ Shader "Fluid/FluidComposite_URP"
             {
                 float2 uv = IN.texcoord;
 
-                float4 comp     = SAMPLE_TEXTURE2D(_CompTex,  sampler_CompTex,  uv);
-                float  rawDepth = comp.a;
+                float4 comp = SAMPLE_TEXTURE2D(_CompTex, sampler_CompTex, uv);
+                float rawDepth = comp.a;
 
                 if (rawDepth >= 9999999.0)
                     discard;
 
                 float3 N = normalize(SAMPLE_TEXTURE2D(_NormalTex, sampler_NormalTex, uv).xyz);
 
-                Light  mainLight = GetMainLight();
+                Light mainLight = GetMainLight();
                 float3 L = normalize(mainLight.direction);
                 float3 V = -WorldViewDir(uv);
                 float3 H = normalize(L + V);
@@ -69,27 +74,27 @@ Shader "Fluid/FluidComposite_URP"
                 // and the terminator is a soft gradient instead of a hard cliff.
                 float NdotL = dot(N, L);
                 float diffTerm = _UseHalfLambert > 0.5
-                    ? NdotL * 0.5 + 0.5          // half-Lambert: maps to [0, 1]
-                    : max(0.0, NdotL);            // classic Lambert: maps to [0, 1]
+                             ? NdotL * 0.5 + 0.5 // half-Lambert: maps to [0, 1]
+                             : max(0.0, NdotL); // classic Lambert: maps to [0, 1]
                 float3 diffuse = paintCol * lightCol * diffTerm;
 
                 // ── Fill light ────────────────────────────────────────────────
                 // Simulates indirect bounce from the floor / environment.
                 // Direction is straight up (0,1,0) — light coming from below,
                 // which fills in the underside of blobs and sideways-facing normals.
-                float3 fillDir  = float3(0, 1, 0);
-                float  fillDot  = max(0.0, dot(N, fillDir));
-                float3 fill     = paintCol * _FillLightColor * fillDot * _FillLightStrength;
+                float3 fillDir = float3(0, 1, 0);
+                float fillDot = max(0.0, dot(N, fillDir));
+                float3 fill = paintCol * _FillLightColor * fillDot * _FillLightStrength;
 
                 // ── Specular ──────────────────────────────────────────────────
                 float3 specular = lightCol * _SpecularStrength
-                                * pow(max(0.0, dot(N, H)), _Shininess);
+                    * pow(max(0.0, dot(N, H)), _Shininess);
 
                 // ── Reflection ────────────────────────────────────────────────
-                float3 R        = reflect(-V, N);
-                float  skyBlend = saturate(R.y * 0.5 + 0.5);
+                float3 R = reflect(-V, N);
+                float skyBlend = saturate(R.y * 0.5 + 0.5);
                 float3 reflColor = lerp(float3(0.3, 0.25, 0.2), float3(0.5, 0.6, 0.8), skyBlend);
-                float  fresnel  = pow(1.0 - saturate(dot(N, V)), 3.0);
+                float fresnel = pow(1.0 - saturate(dot(N, V)), 3.0);
                 float3 reflection = reflColor * _ReflectStrength * (0.2 + 0.8 * fresnel);
 
                 float3 finalColor = ambient + diffuse + fill + specular + reflection;
@@ -104,16 +109,29 @@ Shader "Fluid/FluidComposite_URP"
         {
             Name "FluidCopyToCamera"
             Blend SrcAlpha OneMinusSrcAlpha
-
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment fragCopy
-
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
+
+            TEXTURE2D(_CompTex);
+            SAMPLER(sampler_CompTex); // bind this pass's own fluid depth too
 
             float4 fragCopy(Varyings IN) : SV_Target
             {
+                float rawDepth = SAMPLE_TEXTURE2D(_CompTex, sampler_CompTex, IN.texcoord).a;
+                // fluid linear dist (from ParticleDepthPass)
+                if (rawDepth >= 9999999.0) discard;
+
+                float sceneDeviceDepth = SampleSceneDepth(IN.texcoord);
+                float sceneEyeDepth = LinearEyeDepth(sceneDeviceDepth, _ZBufferParams);
+
+                // rawDepth is currently Euclidean camera-distance, not eye-space Z — see note below.
+                const float bias = 0.02; // small bias to avoid z-fighting against the bucket wall itself
+                if (sceneEyeDepth < rawDepth - bias) discard;
+
                 return SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, IN.texcoord);
             }
             ENDHLSL

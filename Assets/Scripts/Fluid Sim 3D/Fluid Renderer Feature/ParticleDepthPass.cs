@@ -45,7 +45,7 @@ public class ParticleDepthPass : ScriptableRenderPass, System.IDisposable
 
         // AfterRenderingSkybox avoids the ZBinningJob conflict in Unity 6 URP 17
         renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
-
+     //   ConfigureInput(ScriptableRenderPassInput.Depth);
         if (_mat == null && feature.particleDepthShader)
             _mat = CoreUtils.CreateEngineMaterial(feature.particleDepthShader);
 
@@ -67,10 +67,13 @@ public class ParticleDepthPass : ScriptableRenderPass, System.IDisposable
         // Resize / create the two persistent RTs
         FluidRTPool.EnsureDepthRT (ref s_DepthRT,  w, h);
         FluidRTPool.EnsureDepthZRT(ref s_DepthZRT, w, h);
+        
+        var resourceData = frameData.Get<UniversalResourceData>();
 
         // Import both into the render graph for this frame
         var colorHandle = renderGraph.ImportTexture(s_DepthRT);
-        var depthHandle = renderGraph.ImportTexture(s_DepthZRT);
+        // var depthHandle = renderGraph.ImportTexture(s_DepthZRT);
+        var sceneDepthHandle = resourceData.activeDepthTexture; // NOT cameraDepthTexture
 
         // Upload per-frame data to material (outside graph — immediate calls)
         _mat.SetBuffer(s_Positions, fm.PositionsBuffer);
@@ -89,18 +92,15 @@ public class ParticleDepthPass : ScriptableRenderPass, System.IDisposable
             // Color attachment → receives the depth VALUE written to SV_Target
             builder.SetRenderAttachment     (colorHandle, 0, AccessFlags.Write);
             // Depth attachment → separate texture used only for GPU Z-testing
-            builder.SetRenderAttachmentDepth(depthHandle,    AccessFlags.Write);
+            builder.SetRenderAttachmentDepth(sceneDepthHandle,    AccessFlags.Write);
 
             builder.AllowPassCulling(false);
 
             builder.SetRenderFunc((PassData d, RasterGraphContext ctx) =>
             {
                 // Clear color to huge sentinel value, clear depth to 1.0
-                ctx.cmd.ClearRenderTarget(
-                    clearDepth:      true,
-                    clearColor:      true,
-                    backgroundColor: Color.white * 10_000_000f,
-                    depth:           1f);
+                ctx.cmd.ClearRenderTarget(false, true, Color.white * 10_000_000f);
+
 
                 ctx.cmd.DrawMeshInstancedIndirect(d.quad, 0, d.material, 0, d.argsBuffer);
             });

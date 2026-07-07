@@ -59,8 +59,10 @@ public class CanvasGenerator : MonoBehaviour
     {
         if (canvasMesh == null)
         {
-            canvasMesh = new Mesh();
-            canvasMesh.name = "Procedural_Canvas_Mesh";
+            canvasMesh = new Mesh
+            {
+                name = "Procedural_Canvas_Mesh"
+            };
         }
         else
         {

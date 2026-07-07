@@ -20,6 +20,8 @@ class FluidModel : IDisposable
     public ComputeBuffer sortTarget_velocityBuffer;
     public ComputeBuffer sortTarget_predictedPositionsBuffer;
 
+    public ComputeBuffer _debugBuffer;
+
     GPUExecuter _gravityForce;
     GPUExecuter _predictPositions;
     NeighborsSearching _neighborsSearching;
@@ -28,6 +30,8 @@ class FluidModel : IDisposable
     GPUExecuter _viscosityForce;
     GPUExecuter _pressureForce;
     GPUExecuter _surfaceTensionForce;
+    GPUExecuter _canvasCollision;
+    GPUExecuter _frictionForce;
     GPUExecuter _integrate;
     public int ParticleCount { get; private set; }
 
@@ -57,11 +61,14 @@ class FluidModel : IDisposable
             { sortTarget_positionBuffer, Config.SortTarget_PositionsId },
             { sortTarget_predictedPositionsBuffer, Config.SortTarget_PredictedPositionsId },
             { sortTarget_velocityBuffer, Config.SortTarget_VelocitiesId },
+            { _debugBuffer, Config.DebugId },
         };
         _gravityForce = new GravityForce(this, sphCompute, "GravityForce");
         _predictPositions = new PositionPredictor(this, sphCompute, "PositionPredictor");
         _neighborsSearching = new NeighborsSearching(this, sphCompute);
         _calcDensity = new DensityCalc(this, sphCompute, "DensityCalculator");
+        _canvasCollision = new CanvasCollisionSolver(this, sphCompute, "CanvasCollision");
+        _frictionForce = new FrictionForce(this, sphCompute, "FrictionForce");
         setPressureSolver(settings.pressureSolverMethod);
         setViscositySolver(settings.viscositySolverMethod);
         setSurfaceTensionSolver(settings.surfaceTensionSolverMethod);
@@ -77,8 +84,10 @@ class FluidModel : IDisposable
         _calcDensity.Dispatch();
         _pressureForce.Dispatch();
         _viscosityForce.Dispatch();
-        // _surfaceTensionForce.Dispatch();
+        _surfaceTensionForce.Dispatch();
         _integrate.Dispatch();
+        _canvasCollision.Dispatch();
+        _frictionForce.Dispatch();
     }
 
 
@@ -130,6 +139,8 @@ class FluidModel : IDisposable
         sortTarget_positionBuffer = CreateStructuredBuffer<float3>(ParticleCount);
         sortTarget_predictedPositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
         sortTarget_velocityBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+
+        _debugBuffer = CreateStructuredBuffer<float>(2);
     }
 
     void SetInitialBufferData(SpawnData3D spawnData)
@@ -148,16 +159,21 @@ class FluidModel : IDisposable
         _pressureForce.BindsBuffers();
         _viscosityForce.BindsBuffers();
         _surfaceTensionForce.BindsBuffers();
+        _canvasCollision.BindsBuffers();
+        _frictionForce.BindsBuffers();
         _integrate.BindsBuffers();
     }
 
-    public void BindStaticUniforms(ParticleSettings settings, float deltaTime,
-     Vector3 boundsMin,
-     Vector3 boundsMax,
-     Matrix4x4 worldToLocal,
-     Matrix4x4 localToWorld,
-     Vector3 interactionPos,
-     float interactionStrength)
+    public void BindStaticUniforms(
+        ParticleSettings settings, float deltaTime,
+        Vector3 boundsMin,
+        Vector3 boundsMax,
+        Matrix4x4 worldToLocal,
+        Matrix4x4 localToWorld,
+        Vector3 interactionPos,
+        float interactionStrength,
+        CanvasSurface canvas
+     )
     {
         _SPHCompute.SetInt(Config.ParticleCountId, ParticleCount);
         _SPHCompute.SetFloat(Config.MassId, settings.mass);
@@ -179,6 +195,21 @@ class FluidModel : IDisposable
         _SPHCompute.SetMatrix(Config.BoundaryLocalToWorldId, localToWorld);
         _SPHCompute.SetVector(Config.InteractionInputPosId, interactionPos);
         _SPHCompute.SetFloat(Config.InteractionStrengthId, interactionStrength);
+
+        if (canvas == null) return;
+
+        canvas.GetPlaneData(out Vector3 center, out Vector3 normal,
+            out Vector3 tangent, out Vector3 bitangent, out Vector2 halfExtents);
+
+        _SPHCompute.SetVector(Config.CanvasCenterId, center);
+        _SPHCompute.SetVector(Config.CanvasNormalId, normal);
+        _SPHCompute.SetVector(Config.CanvasTangentId, tangent);
+        _SPHCompute.SetVector(Config.CanvasBitangentId, bitangent);
+        _SPHCompute.SetVector(Config.CanvasHalfExtentsId, halfExtents);
+        _SPHCompute.SetFloat(Config.CanvasFrictionCoeffId, canvas.CurrentFrictionDelta);
+        _SPHCompute.SetFloat(Config.CanvasCollisionDampingId, canvas.CurrentCollisionDamping);
+        _SPHCompute.SetMatrix(Config.CanvasWorldToLocalId, canvas.WorldToColliderLocalMatrix);
+        _SPHCompute.SetMatrix(Config.CanvasLocalToWorldId, canvas.ColliderLocalToWorldMatrix);
     }
 
 
@@ -247,6 +278,9 @@ class FluidModel : IDisposable
 
         Release(sortTarget_velocityBuffer);
         sortTarget_velocityBuffer = null;
+
+        Release(_debugBuffer);
+        _debugBuffer = null;
 
         spatialHash?.Release();
         spatialHash = null;

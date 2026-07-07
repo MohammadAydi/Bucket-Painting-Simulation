@@ -99,6 +99,29 @@ public static class FluidRTPool
     }
 
 
+    // ── Pigment Color RT : RGBA16F, no depth ─────────────────────────────────
+    // ParticleDepthPass writes per-particle pigment color into this RT at the
+    // same time it writes depth values into s_DepthRT.
+    // FluidCompositePass samples it to shade each fluid pixel with the correct
+    // pigment color instead of the global _PaintColor uniform.
+    public static void EnsurePigmentColorRT(ref RTHandle handle, int w, int h)
+    {
+        if (handle != null && handle.rt != null &&
+            handle.rt.width == w && handle.rt.height == h)
+            return;
+
+        handle?.Release();
+        handle = RTHandles.Alloc(
+            width:           w,
+            height:          h,
+            colorFormat:     GraphicsFormat.R16G16B16A16_SFloat,
+            depthBufferBits: DepthBits.None,
+            filterMode:      FilterMode.Bilinear,
+            wrapMode:        TextureWrapMode.Clamp,
+            useMipMap:       false,
+            name:            "Fluid_PigmentColorRT");
+    }
+
     // ── Composite Output RT : RGBA32F, no depth ───────────────────────────────
     // FluidCompositePass renders into this, then a copy pass blits it to camera.
     // This avoids the "same texture read+write in one pass" Render Graph error.

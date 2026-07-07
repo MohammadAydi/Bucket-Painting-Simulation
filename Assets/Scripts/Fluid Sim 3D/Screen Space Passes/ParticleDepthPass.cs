@@ -26,10 +26,12 @@ public class ParticleDepthPass : ScriptableRenderPass, System.IDisposable
     // ── Shader property IDs ──────────────────────────────────────────────────
     static readonly int s_Positions = Shader.PropertyToID("Positions");
     static readonly int s_Scale     = Shader.PropertyToID("scale");
+    static readonly int s_Pigments  = Shader.PropertyToID("_Pigments");
 
     // ── RT handles (shared with other passes via FluidRTPool) ────────────────
-    internal static RTHandle s_DepthRT;   // R32_SFloat color — the depth VALUE
-    internal static RTHandle s_DepthZRT;  // Depth16 only   — GPU Z-buffer
+    internal static RTHandle s_DepthRT;        // R32_SFloat color — the depth VALUE
+    internal static RTHandle s_DepthZRT;       // Depth16 only   — GPU Z-buffer
+    internal static RTHandle s_PigmentColorRT; // RGBA16F — per-particle pigment color
 
     // ── State ────────────────────────────────────────────────────────────────
     FluidRendererFeature _feature;
@@ -64,44 +66,48 @@ public class ParticleDepthPass : ScriptableRenderPass, System.IDisposable
         int w = cameraData.cameraTargetDescriptor.width;
         int h = cameraData.cameraTargetDescriptor.height;
 
-        // Resize / create the two persistent RTs
-        FluidRTPool.EnsureDepthRT (ref s_DepthRT,  w, h);
-        FluidRTPool.EnsureDepthZRT(ref s_DepthZRT, w, h);
+        // Resize / create the persistent RTs
+        FluidRTPool.EnsureDepthRT       (ref s_DepthRT,        w, h);
+        FluidRTPool.EnsureDepthZRT      (ref s_DepthZRT,       w, h);
+        FluidRTPool.EnsurePigmentColorRT(ref s_PigmentColorRT, w, h);
         
         var resourceData = frameData.Get<UniversalResourceData>();
 
-        // Import both into the render graph for this frame
-        var colorHandle = renderGraph.ImportTexture(s_DepthRT);
-        // var depthHandle = renderGraph.ImportTexture(s_DepthZRT);
-        var sceneDepthHandle = resourceData.activeDepthTexture; // NOT cameraDepthTexture
+        var depthColorHandle  = renderGraph.ImportTexture(s_DepthRT);
+        var pigmentHandle     = renderGraph.ImportTexture(s_PigmentColorRT);
+        var sceneDepthHandle  = resourceData.activeDepthTexture;
 
         // Upload per-frame data to material (outside graph — immediate calls)
         _mat.SetBuffer(s_Positions, fm.PositionsBuffer);
         _mat.SetFloat (s_Scale,     _feature.depthParticleSize);
 
+        // Bind pigment buffer when available (null-safe: shader uses white fallback)
+        if (fm.PigmentBuffer != null)
+            _mat.SetBuffer(s_Pigments, fm.PigmentBuffer);
+
         // Ensure args buffer
         EnsureArgsBuffer(fm.ParticleCount);
 
-        // ── Record raster pass ───────────────────────────────────────────────
+        // ── Record raster pass (MRT: SV_Target0 = depth, SV_Target1 = pigment) ─
         using (var builder = renderGraph.AddRasterRenderPass<PassData>("Fluid.ParticleDepth", out var data))
         {
             data.material   = _mat;
             data.quad       = _quad;
             data.argsBuffer = _argsBuffer;
 
-            // Color attachment → receives the depth VALUE written to SV_Target
-            builder.SetRenderAttachment     (colorHandle, 0, AccessFlags.Write);
-            // Depth attachment → separate texture used only for GPU Z-testing
-            builder.SetRenderAttachmentDepth(sceneDepthHandle,    AccessFlags.Write);
+            // Target 0: depth value (R32_SFloat)
+            builder.SetRenderAttachment(depthColorHandle, 0, AccessFlags.Write);
+            // Target 1: pigment color (RGBA16F)
+            builder.SetRenderAttachment(pigmentHandle,    1, AccessFlags.Write);
+            // Depth attachment for Z-testing
+            builder.SetRenderAttachmentDepth(sceneDepthHandle, AccessFlags.Write);
 
             builder.AllowPassCulling(false);
 
             builder.SetRenderFunc((PassData d, RasterGraphContext ctx) =>
             {
-                // Clear color to huge sentinel value, clear depth to 1.0
+                // Clear depth-color RT to sentinel; pigment RT to black-transparent
                 ctx.cmd.ClearRenderTarget(false, true, Color.white * 10_000_000f);
-
-
                 ctx.cmd.DrawMeshInstancedIndirect(d.quad, 0, d.material, 0, d.argsBuffer);
             });
         }

@@ -11,6 +11,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
     static readonly int s_ReflectStrength   = Shader.PropertyToID("_ReflectStrength");
     static readonly int s_CompTex           = Shader.PropertyToID("_CompTex");
     static readonly int s_NormalTex         = Shader.PropertyToID("_NormalTex");
+    static readonly int s_PigmentColorTex   = Shader.PropertyToID("_PigmentColorTex");
     static readonly int s_AmbientStrength   = Shader.PropertyToID("_AmbientStrength");
     static readonly int s_UseHalfLambert    = Shader.PropertyToID("_UseHalfLambert");
     static readonly int s_FillLightStrength = Shader.PropertyToID("_FillLightStrength");
@@ -51,14 +52,16 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
 
         // Bind fluid textures directly on the material — persistent RTHandles,
         // safe to set outside the graph, guaranteed bound when the shader runs.
-        _mat.SetTexture(s_CompTex,   PackDepthPass.s_CompRT);
-        _mat.SetTexture(s_NormalTex, NormalReconstructPass.s_NormalRT);
+        _mat.SetTexture(s_CompTex,        PackDepthPass.s_CompRT);
+        _mat.SetTexture(s_NormalTex,      NormalReconstructPass.s_NormalRT);
+        _mat.SetTexture(s_PigmentColorTex, ParticleDepthPass.s_PigmentColorRT);
 
-        var compHandle   = renderGraph.ImportTexture(PackDepthPass.s_CompRT);
-        var normalHandle = renderGraph.ImportTexture(NormalReconstructPass.s_NormalRT);
-        var outHandle    = renderGraph.ImportTexture(s_OutRT);
-        var colorHandle  = resourceData.activeColorTexture;
-        var sceneDepthHandle = resourceData.cameraDepthTexture; // TextureHandle
+        var compHandle        = renderGraph.ImportTexture(PackDepthPass.s_CompRT);
+        var normalHandle      = renderGraph.ImportTexture(NormalReconstructPass.s_NormalRT);
+        var pigmentHandle     = renderGraph.ImportTexture(ParticleDepthPass.s_PigmentColorRT);
+        var outHandle         = renderGraph.ImportTexture(s_OutRT);
+        var colorHandle       = resourceData.activeColorTexture;
+        var sceneDepthHandle  = resourceData.cameraDepthTexture;
 
         // ── Pass A: Clear outRT to (0,0,0,0), then shade fluid pixels into it ─
         // MUST clear every frame — outRT is persistent and discard() leaves stale
@@ -69,8 +72,9 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
         {
             data.material = _mat;
 
-            builder.UseTexture(compHandle,   AccessFlags.Read);
-            builder.UseTexture(normalHandle, AccessFlags.Read);
+            builder.UseTexture(compHandle,    AccessFlags.Read);
+            builder.UseTexture(normalHandle,  AccessFlags.Read);
+            builder.UseTexture(pigmentHandle, AccessFlags.Read);
             builder.SetRenderAttachment(outHandle, 0, AccessFlags.Write);
             
             builder.AllowPassCulling(false);

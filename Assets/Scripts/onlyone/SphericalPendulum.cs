@@ -2,17 +2,18 @@ using System;
 using UnityEngine;
 
 namespace onlyone
-{ 
+{
     [DisallowMultipleComponent]
     public class SphericalPendulum : MonoBehaviour
     {
+        private const float UnitsPerMeter = 100f;
         [Header("Scene References")]
         [SerializeField] private Transform pivot;
         [SerializeField] private Transform bob;
 
         [Header("Suspension")]
-        [Tooltip("Rope length l (meters). يُستخدم للرسم في الوضع المستقل فقط.")]
-        [SerializeField, Min(0.01f)] public float length = 1.2f;
+        [Tooltip("Rope length l (سم). يُستخدم للرسم في الوضع المستقل فقط.")]
+        [SerializeField, Min(0.01f)] public float length = 120f;
 
         [Tooltip("يُطفئه PbdRope عند الاقتران، فيتوقّف النواس عن تحريك الدلو.")]
         public bool driveBucket = true;
@@ -28,34 +29,34 @@ namespace onlyone
         [SerializeField] private float startPhiDot;
 
         [Header("Environment (الوضع المستقل فقط)")]
-        [SerializeField] private float gravity = 9.81f;
-        [SerializeField, Min(0f)] private float airDensity = 1.225f;
-        [Tooltip("احتكاك المحور f (1/s).")]
+        [SerializeField] private float gravity = 981f;
+        [SerializeField, Min(0f)] private float airDensity = 0.000001225f;
+        [Tooltip("احتكاك المحور f (1/s). معدّل زمني بحت، لا يتأثر بوحدة الطول.")]
         [SerializeField, Min(0f)] private float pivotFriction = 0.02f;
 
         [Header("Bucket")]
         [SerializeField, Min(0.001f)] private float mass = 3.0f;
-        [SerializeField, Min(0f)] private float bucketRadius = 0.13f;
-        [Tooltip("Cd. ~0.47 كرة، ~1.0 دلو مفتوح.")]
+        [SerializeField, Min(0f)] private float bucketRadius = 13f;
+        [Tooltip("Cd. ~0.47 كرة، ~1.0 دلو مفتوح. بلا أبعاد، بلا تغيير.")]
         [SerializeField, Min(0f)] private float dragCoefficient = 1.0f;
 
         [Header("Integration (الوضع المستقل فقط)")]
         [SerializeField, Min(0.0001f)] private float fixedStep = 0.004f;
- 
+
         private double th, ph, thDot, phDot;
         private double accumulator;
         private RopeState state;
 
         private const double MinSin = 1e-3;
         private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
- 
+
         public double Theta           => th;
         public double Phi             => ph;
         public double ThetaDot        => thDot;
         public double PhiDot          => phDot;
         public double EffectiveLength => state.effLength > 0 ? state.effLength : length;
         public float  Mass            => mass;
- 
+
         public double Tension         => state.tension;
         public double KineticEnergy   => state.kineticEnergy;
         public double PotentialEnergy => state.potentialEnergy;
@@ -106,17 +107,17 @@ namespace onlyone
             state = new RopeState(th, ph, thDot, phDot, length, 0, 0, 0, 0);
             accumulator = 0;
         }
- 
+
         public void PushState(in RopeState s)
         {
             state = s;
             th = s.theta; ph = s.phi; thDot = s.thetaDot; phDot = s.phiDot;
         }
- 
+
         public void SetStateFromWorld(double theta, double phi,
             double thetaDot, double phiDot, double effLen)
             => PushState(new RopeState(theta, phi, thetaDot, phiDot, effLen, 0, 0, 0, 0));
- 
+
         private void Update()
         {
             if (externallyDriven) return;   // الحبل يقود، لا تكامل هنا.
@@ -197,19 +198,19 @@ namespace onlyone
             Gizmos.color = new Color(0.2f, 0.6f, 1f, 0.12f);
             Gizmos.DrawWireSphere(pivot.position, length);
             Gizmos.color = Color.yellow;
-            Gizmos.DrawSphere(pivot.position, 0.03f);
+            Gizmos.DrawSphere(pivot.position, 0.03f * UnitsPerMeter);
         }
+
         private void OnGUI()
         {
             GUILayout.BeginArea(new Rect(10, 10, 300, 180), GUI.skin.box);
-
-            GUILayout.Label($"Effective Length : {EffectiveLength:F4} m");
+            GUILayout.Label($"Effective Length : {EffectiveLength:F4} cm");
             GUILayout.Label($"Theta            : {Theta * Mathf.Rad2Deg:F2}°");
             GUILayout.Label($"Phi              : {Phi * Mathf.Rad2Deg:F2}°");
             GUILayout.Label($"ThetaDot         : {ThetaDot:F3} rad/s");
             GUILayout.Label($"PhiDot           : {PhiDot:F3} rad/s");
-            GUILayout.Label($"Tension : {Tension:F2} N");
-            GUILayout.Label($"Energy  : {TotalEnergy:F3} J");
+            GUILayout.Label($"Tension : {Tension / UnitsPerMeter:F2} N");
+            GUILayout.Label($"Energy  : {TotalEnergy / (UnitsPerMeter * UnitsPerMeter):F3} J");
 
             GUILayout.EndArea();
         }

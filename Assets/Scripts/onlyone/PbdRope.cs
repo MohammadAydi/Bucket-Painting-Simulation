@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 
 namespace onlyone
-{ 
+{
     [DisallowMultipleComponent]
     [RequireComponent(typeof(LineRenderer))]
     public sealed class PbdRope : MonoBehaviour
@@ -17,19 +17,18 @@ namespace onlyone
         [SerializeField, Range(2, 80)]       private int   segments = 26;
         [SerializeField, Min(0.01f)]         private float ropeLength = 1.22f;
         [SerializeField, Min(0.0005f)]       private float ropeWidth = 0.008f;
-        [SerializeField, Range(0.001f, 10f)] private float linearDensity = 0.1f;
-
+        [SerializeField, Range(0.00001f, 0.1f)] private float linearDensity = 0.001f;
         [Header("Solver (XPBD + Substeps)")]
         [Tooltip("خطوات فرعية لكل fixedStep. Macklin 2019: خطأ XPBD الزمني ∝ dt²، " +
                  "فالتقسيم يتفوق على رفع التكرارات في حفظ الطاقة.")]
         [SerializeField, Range(1, 8)] private int substeps = 4;
         [SerializeField, Range(1, 80)] private int constraintIterations = 8;
-        [Tooltip("امتثال قيد المسافة α (m/N). XPBD Eq.24: α̃ = α/dt².")]
+
         [SerializeField, Min(0f)] private float compliance = 0.00004f;
         [Tooltip("تخميد داخلي σ (1/s): v ← v·exp(−σ·dt). مستقل عن حجم الخطوة. " +
                  "(نموذج لزج قياسي — ليس من DER/XPBD.)")]
         [SerializeField, Min(0f)] private float internalDampingRate = 0.05f;
-        [Tooltip("حاجز أمان ضد الانفجار العددي فقط.")]
+
         [SerializeField, Range(1f, 1.4f)] private float stretchLimit = 1.2f;
         [Tooltip("β̃ لقيد المسافة (XPBD Eq.26): يخمد تشوّه القطعة دون تخميد الحركة المكانية.")]
         [SerializeField, Min(0f)] private float stretchDampingBeta;
@@ -75,26 +74,23 @@ namespace onlyone
         [Tooltip("حاجز أمان (rad/s).")]
         [SerializeField, Min(1f)] private float maxTwistRate = 600f;
 
- 
-        [SerializeField] private string materialName = "Braided Nylon";
- 
-        [SerializeField, Min(1f)] private float density = 1140f;
-        
+
+        [SerializeField, Min(0.000001f)] private float density = 0.00114f;
+
         [SerializeField, Min(1000f)] private float youngModulus = 3e8f;
 
         [SerializeField, Range(0f, 0.5f)] private float poissonRatio = 0.4f;
 
         [SerializeField] private bool breakable = true;
 
- 
         [SerializeField, Min(1000f)] private float ultimateStress = 6e7f;
- 
+
         [SerializeField, Min(1f)] private float safetyFactor = 1.2f;
-        
+
         [SerializeField, Range(0f, 1f)] private float breakingStrain;
- 
+
         [SerializeField] private bool allowPlasticFailure;
-        [SerializeField, Range(0.3f, 0.95f)] private float yieldStressRatio = 0.7f;  
+        [SerializeField, Range(0.3f, 0.95f)] private float yieldStressRatio = 0.7f;
         public float CurrentTensionN     { get; private set; }
         public float CurrentStressPa     { get; private set; }
         public float UltimateStressPa    => ultimateStress;
@@ -105,20 +101,19 @@ namespace onlyone
 
         private LineRenderer fallenLr;
         private Vector3[]    topPiecePos, bottomPiecePos;
-        private float[]      plasticStretch;  
+        private float[]      plasticStretch;
         [SerializeField] private bool deriveFromMaterial = true;
         private LineRenderer lr;
         private int n; private float segLen;
         private Vector3[] pos, prev, renderPos;
         private float[] invMass, lambda, lambdaBend;
         private float accumulator; private bool ready;
-        private float bucketTension;         
-        private float lastSubstep;          
+        private float bucketTension;
 
         private float[]   twist, twistPrev, invInertia, lambdaTw, refTwist;
         private Vector3[] tangent, prevTangent, refDir;
         private float     lastAppliedTwist;
- 
+
         public float  TensionN     => bucketTension;
         public double TotalEnergyJ => currentState.totalEnergy;
         private RopeState currentState;
@@ -162,8 +157,7 @@ namespace onlyone
             torsionIterations     = Mathf.Max(1, c.torsionIterations);
             clampPivotTwist       = c.clampPivotTwist;
             maxTwistRate          = c.maxTwistRate;
-            materialName        = c.materialName;
-            density             = c.density;
+             density             = c.density;
             youngModulus        = c.youngModulus;
             poissonRatio        = c.poissonRatio;
             deriveFromMaterial  = c.deriveFromMaterial;
@@ -181,25 +175,24 @@ namespace onlyone
         {
             if (!deriveFromMaterial) return;
 
-            float area = Mathf.PI * ropeRadius * ropeRadius;         
-            float I    = (Mathf.PI / 4f) * Mathf.Pow(ropeRadius, 4);     
-            float J    = (Mathf.PI / 2f) * Mathf.Pow(ropeRadius, 4);     
-            float G    = youngModulus / (2f * (1f + poissonRatio));      
- 
+            float area = Mathf.PI * ropeRadius * ropeRadius;
+            float I = (Mathf.PI / 4f) * Mathf.Pow(ropeRadius, 4);
+            float j = 2f * I;
+            float g    = youngModulus / (2f * (1f + poissonRatio));
+
             linearDensity = density * area;
- 
+
             compliance = segLen / Mathf.Max(1e-9f, youngModulus * area);
 
-             
             bendingStiffness = youngModulus * I / Mathf.Max(1e-9f, segLen);
- 
-            torsionalStiffness = G * J / Mathf.Max(1e-9f, segLen);
+
+            torsionalStiffness = g * j / Mathf.Max(1e-9f, segLen);
         }
 
         private void InitializeRope()
         {
             ready = false;
- 
+
             IsBroken = false;
             BreakIndex = -1;
 
@@ -211,16 +204,14 @@ namespace onlyone
 
             if (pendulum)
             {
-                bool coupled = dynamicBucket;
-                pendulum.driveBucket      = !coupled;
-                pendulum.externallyDriven = coupled;
+                pendulum.driveBucket      = !dynamicBucket;
+                pendulum.externallyDriven = dynamicBucket;
             }
 
             lr = GetComponent<LineRenderer>();
 
             n = segments + 1;
             segLen = ropeLength / segments;
-            lastSubstep = fixedStep / substeps;
 
             pos        = new Vector3[n];
             prev       = new Vector3[n];
@@ -228,7 +219,7 @@ namespace onlyone
             invMass    = new float[n];
             lambda     = new float[segments];
             lambdaBend = new float[n];
- 
+
             plasticStretch = new float[segments];
 
             accumulator = 0f;
@@ -254,7 +245,6 @@ namespace onlyone
             if (accumulator > 0.25f) accumulator = 0.25f;
 
             float h = fixedStep / substeps;
-            lastSubstep = h;
             while (accumulator >= fixedStep)
             {
                 for (int s = 0; s < substeps; s++)
@@ -264,7 +254,7 @@ namespace onlyone
                     if (enableTorsion)
                         SolveTorsion(h);
                 }
- 
+
                 if (dynamicBucket && pendulum && !IsBroken)
                     PublishState(h);
 
@@ -292,7 +282,7 @@ namespace onlyone
             lr.widthCurve      = AnimationCurve.Constant(0f, 1f, 1f);
             lr.widthMultiplier = ropeWidth;
         }
- 
+
         private void LaunchFromInitialState()
         {
             if (!dynamicBucket || !pendulum)
@@ -336,7 +326,7 @@ namespace onlyone
             tangent     = new Vector3[segments];
             prevTangent = new Vector3[segments];
             refDir      = new Vector3[segments];
- 
+
             float mEdge = Mathf.Max(1e-9f, linearDensity * segLen);
             float iedge = 0.5f * mEdge * ropeRadius * ropeRadius;
             for (int i = 0; i < segments; i++) invInertia[i] = 1f / Mathf.Max(1e-12f, iedge);
@@ -358,7 +348,7 @@ namespace onlyone
             for (int i = 1; i < segments; i++)
                 refDir[i] = ParallelTransport(refDir[i - 1], tangent[i - 1], tangent[i]);
             Array.Clear(refTwist, 0, segments);
- 
+
             if (initialTurns != 0f)
             {
                 float total = initialTurns * 2f * Mathf.PI;
@@ -375,17 +365,18 @@ namespace onlyone
 
         private void Step(float dt)
         {
-            float alphaStretch = compliance / (dt * dt); 
-            bool solveBending = enableBending && bendingStiffness > 1e-9f;
-            float alphaBend   = solveBending ? (1f / bendingStiffness) / (dt * dt) : 0f;
+            float dt2 = dt * dt;
+            float alphaStretch = compliance / dt2;
+            bool  solveBending  = enableBending && bendingStiffness > 1e-9f;
+            float alphaBend     = solveBending ? (1f / bendingStiffness) / dt2 : 0f;
 
             Array.Clear(lambda, 0, segments);
-            Array.Clear(lambdaBend, 0, n);
+            if (solveBending) Array.Clear(lambdaBend, 0, n);
 
             float retention = Mathf.Exp(-internalDampingRate * dt);
             Vector3 accDt2 = (Vector3.down * gravity + wind) * (dt * dt);
 
-            Vector3 bucketPredicted = pos[n - 1];   
+            Vector3 bucketPredicted = pos[n - 1];
 
             for (int i = 1; i < n; i++)
             {
@@ -395,7 +386,7 @@ namespace onlyone
                 Vector3 delta = (cur - prev[i]) * retention;
 
                 if (i == n - 1 && dynamicBucket)
-                { 
+                {
                     float a  = Mathf.PI * bucketRadius * bucketRadius;
                     float kd = 0.5f * airDensity * bucketDragCoefficient * a * invMass[i];
                     float f  = Mathf.Min(kd * delta.magnitude, 1f);
@@ -404,11 +395,11 @@ namespace onlyone
 
                 pos[i]  = cur + delta + accDt2;
                 prev[i] = cur;
-                if (i == n - 1) bucketPredicted = pos[i];    
+                if (i == n - 1) bucketPredicted = pos[i];
             }
 
             PinEndpoints(trackVelocity: true);
-            
+
             for (int k = 0; k < constraintIterations; k++)
             {
                 bool fwd = (k & 1) == 0;
@@ -417,7 +408,7 @@ namespace onlyone
                 else     for (int i = segments - 1; i >= 0; i--)
                     { if (IsBroken && i == BreakIndex) continue; SolveSegment(i, alphaStretch, stretchDampingBeta); }
 
-                if (solveBending)  
+                if (solveBending)
                 {
                     if (fwd) for (int i = 1; i < n - 1; i++)
                         { if (IsBroken && (i-1 == BreakIndex || i == BreakIndex)) continue; SolveBend(i, alphaBend); }
@@ -429,15 +420,12 @@ namespace onlyone
 
             ClampStretch();
             PinEndpoints(trackVelocity: false);
- 
+
             float bucketMassEff = dynamicBucket ? bucketMass : Mathf.Max(1e-9f, linearDensity * segLen);
             Vector3 bucketCorrection  = pos[n - 1] - bucketPredicted;
-            Vector3 ropeForceOnBucket = bucketCorrection * (bucketMassEff / (dt * dt));
+            Vector3 ropeForceOnBucket = bucketCorrection * (bucketMassEff / dt2);
             bucketTension = ropeForceOnBucket.magnitude;
-            Debug.Log(
-                $"Weight={bucketMass * gravity:F1} N   " +
-                $"Tension={CurrentTensionN:F1} N");
- 
+
             float area = Mathf.PI * ropeRadius * ropeRadius;
             float maxStress = 0f;
             int   worstIdx  = -1;
@@ -448,9 +436,9 @@ namespace onlyone
 
                 float tensionN;
                 if (i == segments - 1 && dynamicBucket)
-                    tensionN = bucketTension;                 
+                    tensionN = bucketTension;
                 else
-                    tensionN = Mathf.Abs(lambda[i]) / (dt * dt);  
+                    tensionN = Mathf.Abs(lambda[i]) / (dt * dt);
 
                 float stressPa = tensionN / area;
 
@@ -470,12 +458,8 @@ namespace onlyone
             CurrentTensionN     = maxStress * area;
             CurrentStressPa     = maxStress;
             CurrentSafetyFactor = (maxStress > 1f) ? (ultimateStress / maxStress) : float.PositiveInfinity;
-            EffectiveRopeLength = Vector3.Distance(pos[0], pos[n - 1]);  
-            
-            Debug.Log(
-                $"Stress={maxStress/1e6f:F2} MPa   " +
-                $"Limit={(ultimateStress/safetyFactor)/1e6f:F2} MPa   " +
-                $"Tension={CurrentTensionN:F1} N");
+            EffectiveRopeLength = Vector3.Distance(pos[0], pos[n - 1]);
+
             if (breakable && !IsBroken)
             {
                 float allowStress = ultimateStress / Mathf.Max(1f, safetyFactor);
@@ -500,14 +484,14 @@ namespace onlyone
         {
             if (IsBroken) return;
             IsBroken   = true;
-            BreakIndex = atSegmentIndex; 
-            if (dynamicBucket && pendulum) pendulum.externallyDriven = false;   
+            BreakIndex = atSegmentIndex;
+            if (dynamicBucket && pendulum) pendulum.externallyDriven = false;
 
             int topCount    = atSegmentIndex + 1;
             int bottomCount = n - topCount;
 
             topPiecePos = new Vector3[topCount];
-            
+
             if (bottomCount >= 2)
             {
                 bottomPiecePos = new Vector3[bottomCount];
@@ -517,7 +501,7 @@ namespace onlyone
                 fallenLr.widthMultiplier  = ropeWidth;
                 fallenLr.widthCurve       = AnimationCurve.Constant(0f, 1f, 1f);
                 fallenLr.useWorldSpace    = true;
-            } 
+            }
         }
         private void SolveSegment(int idx, float alphaTilde, float betaTilde)
         {
@@ -531,14 +515,14 @@ namespace onlyone
 
             Vector3 nHat = d / dist;
             float restLen = segLen + (allowPlasticFailure ? plasticStretch[idx] : 0f);
-            float c = dist - restLen;  
+            float c = dist - restLen;
 
             float velTerm = 0f;
             if (betaTilde > 0f)
             {
                 Vector3 dxA = pos[a] - prev[a];
                 Vector3 dxB = pos[b] - prev[b];
-                velTerm = Vector3.Dot(nHat, dxB - dxA);   
+                velTerm = Vector3.Dot(nHat, dxB - dxA);
             }
 
             float gamma = alphaTilde * betaTilde;
@@ -548,9 +532,9 @@ namespace onlyone
 
             pos[a] -= nHat * (invMass[a] * dL);
             pos[b] += nHat * (invMass[b] * dL);
-            
+
         }
- 
+
         private void SolveBend(int i, float alphaTilde)
         {
             Vector3 ea = pos[i] - pos[i - 1];
@@ -591,7 +575,7 @@ namespace onlyone
                 Vector3 e = pos[i + 1] - pos[i];
                 tangent[i] = e.sqrMagnitude > 1e-14f ? e.normalized : tangent[i];
             }
- 
+
             for (int i = 0; i < segments; i++)
             {
                 Vector3 d = ParallelTransport(refDir[i], prevTangent[i], tangent[i]);
@@ -599,13 +583,13 @@ namespace onlyone
                 refDir[i] = d.sqrMagnitude > 1e-10f ? d.normalized : OrthoSeed(tangent[i]);
                 prevTangent[i] = tangent[i];
             }
- 
+
             for (int j = 1; j < segments; j++)
             {
                 Vector3 spaceT = ParallelTransport(refDir[j - 1], tangent[j - 1], tangent[j]);
                 refTwist[j] = SignedAngle(spaceT, refDir[j], tangent[j]);
             }
- 
+
             for (int i = 0; i < segments; i++)
             {
                 if (invInertia[i] < 1e-12f) { twistPrev[i] = twist[i]; continue; }
@@ -621,7 +605,7 @@ namespace onlyone
             }
 
             if (clampPivotTwist) twist[0] = 0f;
- 
+
             if(torsionalStiffness > 1e-9f)
             {
                 float alphaTw = (1f / torsionalStiffness) / (dt * dt);
@@ -649,7 +633,7 @@ namespace onlyone
                         twist[b] += invInertia[b] * dL;
                     }
                 }
-            } 
+            }
         }
 
         private void ClampStretch()
@@ -659,7 +643,7 @@ namespace onlyone
                 if (IsBroken && i == BreakIndex) continue;
 
                 float restLen = segLen + (allowPlasticFailure ? plasticStretch[i] : 0f);
-                float maxLen  = restLen * stretchLimit;   
+                float maxLen  = restLen * stretchLimit;
 
                 Vector3 d = pos[i + 1] - pos[i];
                 float dist = d.magnitude;
@@ -687,7 +671,7 @@ namespace onlyone
             if (!dynamicBucket)
                 pos[n - 1] = bobOverride ? bobOverride.position : bob.position;
         }
- 
+
         private void PublishState(float dt)
         {
             Vector3 r = pos[n - 1] - pos[0];
@@ -705,7 +689,7 @@ namespace onlyone
             Vector3 eTheta = new Vector3((float)(cT * cp), (float)sT, -(float)(cT * sp));
             Vector3 ePhi   = new Vector3(-(float)sp, 0f, -(float)cp);
 
-            Vector3 v = (pos[n - 1] - prev[n - 1]) / dt;  
+            Vector3 v = (pos[n - 1] - prev[n - 1]) / dt;
             double thetaDot = Vector3.Dot(v, eTheta) / lEff;
             double phiDot   = Vector3.Dot(v, ePhi)   / (lEff * sSafe);
 
@@ -715,7 +699,7 @@ namespace onlyone
                                          lEff, bucketTension, ke, pe, elastic);
             pendulum.PushState(currentState);
         }
- 
+
         private void ComputeEnergy(float dt, out double ke, out double pe, out double elastic)
         {
             ke = 0; pe = 0;
@@ -727,9 +711,9 @@ namespace onlyone
                 float mi = (i == n - 1 && dynamicBucket) ? bucketMass : mEdge;
                 Vector3 vel = (pos[i] - prev[i]) / dt;
                 ke += 0.5 * mi * vel.sqrMagnitude;
-                pe += mi * gravity * (pos[i].y - pivotPos.y);   
+                pe += mi * gravity * (pos[i].y - pivotPos.y);
             }
- 
+
             double eStretch = 0, eBend = 0, eTwist = 0;
             float ks = compliance > 1e-12f ? 1f / compliance : 0f;
             for (int i = 0; i < segments; i++)
@@ -756,7 +740,7 @@ namespace onlyone
         }
 
         private void DriveBucket()
-        { 
+        {
             bool orientationValid = !(IsBroken && BreakIndex == segments - 1);
             if (orientationValid && bucketBody && n >= 2)
             {

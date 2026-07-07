@@ -24,7 +24,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
     {
         _feature = feature;
         renderPassEvent = RenderPassEvent.AfterRenderingTransparents+ 4;
-
+    //    ConfigureInput(ScriptableRenderPassInput.Depth);
         if (_mat == null && feature.fluidCompositeShader)
             _mat = CoreUtils.CreateEngineMaterial(feature.fluidCompositeShader);
     }
@@ -58,6 +58,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
         var normalHandle = renderGraph.ImportTexture(NormalReconstructPass.s_NormalRT);
         var outHandle    = renderGraph.ImportTexture(s_OutRT);
         var colorHandle  = resourceData.activeColorTexture;
+        var sceneDepthHandle = resourceData.cameraDepthTexture; // TextureHandle
 
         // ── Pass A: Clear outRT to (0,0,0,0), then shade fluid pixels into it ─
         // MUST clear every frame — outRT is persistent and discard() leaves stale
@@ -71,6 +72,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
             builder.UseTexture(compHandle,   AccessFlags.Read);
             builder.UseTexture(normalHandle, AccessFlags.Read);
             builder.SetRenderAttachment(outHandle, 0, AccessFlags.Write);
+            
             builder.AllowPassCulling(false);
             builder.AllowGlobalStateModification(true);
 
@@ -91,6 +93,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
             data.outHandle = outHandle;   // store handle in PassData — no lambda closure capture
 
             builder.UseTexture(outHandle, AccessFlags.Read);
+            builder.UseTexture(sceneDepthHandle, AccessFlags.Read);   // <-- NEW
             builder.SetRenderAttachment(colorHandle, 0, AccessFlags.Write);
             builder.AllowPassCulling(false);
 

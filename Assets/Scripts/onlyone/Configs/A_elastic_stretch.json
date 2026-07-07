@@ -4,7 +4,7 @@
     "bucketMass": 3.0, "bucketRadius": 13.0,
     "airDensity": 0.000001225, "bucketDragCoefficient": 1.0,
     "length": 120.0, "startTheta": 60.0, "startPhi": 0.0,
-    "startThetaDot": 0.0, "startPhiDot": 0.0, "pivotFriction": 0.02,
+    "startThetaDot": 0.0, "startPhiDot": 120.0, "pivotFriction": 0.02,
     "segments": 26, "ropeLength": 122.0, "ropeWidth": 1.0,
     "linearDensity": 0.000895,
     "substeps": 6, "constraintIterations": 10,

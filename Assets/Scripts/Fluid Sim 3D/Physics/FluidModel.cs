@@ -121,8 +121,8 @@ class FluidModel : IDisposable
         _viscosityForce.Dispatch();
         _surfaceTensionForce.Dispatch();
         _integrate.Dispatch();
-        // _canvasCollision .Dispatch();
-        // _frictionForce.Dispatch();
+        _canvasCollision .Dispatch();
+        _frictionForce.Dispatch();
 
         // Pigment diffusion runs after integration so particle positions are final.
         // Diffusion reads PigmentBuffer, writes PigmentBufferWrite, then we swap

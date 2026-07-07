@@ -152,8 +152,10 @@ MonoBehaviour:
   boundaryVolume: {fileID: 1562304914}
   settings: {fileID: 11400000, guid: e935e18c03d419345ab1e0a4542d807e, type: 2}
   fluidComputeShader: {fileID: 7200000, guid: 7433be18ba63a634abc5123f294dbfe7, type: 3}
-  oneSweepShader: {fileID: 7200000, guid: 7461e55737894fc4db68b4f3291b312d, type: 3}
   particleMaterial: {fileID: 2100000, guid: 844544271cbfcc8428cda7c6a1428bd6, type: 2}
+  bucket: {fileID: 0}
+  bucketCollision: {fileID: 0}
+  canvasSurface: {fileID: 0}
   normalTimeScale: 1
   slowTimeScale: 0.1
   maxTimestepFPS: 60

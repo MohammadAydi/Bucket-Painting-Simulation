@@ -15,7 +15,7 @@ public class FluidManager3D : MonoBehaviour
 
     [Header("Time Step")] public float normalTimeScale = 1;
     public float slowTimeScale = 0.1f;
-    public float maxTimestepFPS = 60; // if time-step dips lower than this fps, simulation will run slower (set to 0 to disable)
+    public float maxTimestepFPS = 60;
     public int iterationsPerFrame = 3;
     public bool inSlowMode = false;
 
@@ -45,9 +45,26 @@ public class FluidManager3D : MonoBehaviour
     ViscositySolverMethod _lastViscositySolverMethod;
     SurfaceTensionSolverMethod _lastSurfaceTensionSolverMethod;
 
+    // ── Existing public accessors ─────────────────────────────────────────────
     public ComputeBuffer PositionsBuffer => _fluidModel?.PositionsBuffer;
     public ComputeBuffer VelocitiesBuffer => _fluidModel?.VelocitiesBuffer;
     public int ParticleCount => _fluidModel?.ParticleCount ?? 0;
+
+    // ── NEW: accessors for the raymarch renderer feature ──────────────────────
+    // These expose read-only views of data that the raymarch system needs
+    // to cache per-frame without reaching into private fields.
+
+    /// <summary>Simulation settings (smoothingRadius, mass, etc.) — read-only.</summary>
+    public ParticleSettings SimSettings => settings;
+
+    /// <summary>Boundary volume providing LocalMin/Max and transform matrices.</summary>
+    public FluidBoundary3D BoundaryVolume => boundaryVolume;
+
+    /// <summary>Internal FluidModel — gives the raymarch voxelizer access to
+    /// the predicted-positions buffer and sorted spatial hash buffers.</summary>
+    public FluidModel FluidModelInternal => _fluidModel;
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     void Awake()
     {
@@ -77,7 +94,7 @@ public class FluidManager3D : MonoBehaviour
     void Update()
     {
         if (!Application.isPlaying || !_initialized || boundaryVolume == null) return;
-        float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; // If framerate dips too low, run the simulation slower than real-time
+        float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity;
         float dt = Mathf.Min(Time.deltaTime * ActiveTimeScale, maxDeltaTime);
         RunSimulationFrame(dt);
     }
@@ -95,7 +112,6 @@ public class FluidManager3D : MonoBehaviour
             Vector3.zero,
             0
         );
-        // Simulation sub-steps
         for (int i = 0; i < iterationsPerFrame; i++)
         {
             _fluidModel.Step();
@@ -107,10 +123,8 @@ public class FluidManager3D : MonoBehaviour
 
         if (!_initialized || boundaryVolume == null) return;
         Bounds bounds = boundaryVolume.WorldBounds;
-        _renderSystem.Render(_fluidModel.ParticleCount, bounds);
-
+        // _renderSystem.Render(_fluidModel.ParticleCount, bounds);
     }
-
 
     void OnDestroy()
     {
@@ -155,7 +169,6 @@ public class FluidManager3D : MonoBehaviour
     void OnSettingsChanged()
     {
         if (settings == null || !_initialized) return;
-
 
         bool requiresReinitialize =
             _lastParticleCount != settings.particleCount ||

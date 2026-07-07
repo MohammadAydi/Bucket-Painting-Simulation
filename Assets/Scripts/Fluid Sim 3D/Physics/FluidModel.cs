@@ -5,7 +5,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using static Fluid_Sim_3D.Utilities.ComputeHelper;
 
-class FluidModel : IDisposable
+public class FluidModel : IDisposable
 {
 
     public ComputeShader _SPHCompute;

@@ -1,0 +1,147 @@
+// FluidVoxelizer.compute
+// ─────────────────────────────────────────────────────────────────────────────
+// Converts the SPH particle cloud into a Texture3D density map every frame.
+//
+// WHY THIS EXISTS:
+//   The raymarcher needs a continuous scalar field to march through. This kernel
+//   walks each voxel, finds its world-space position, then queries the SPH
+//   spatial hash for nearby particles and accumulates density using the same
+//   SpikyPow2 kernel as the main simulation. That means the density map is
+//   always consistent with what the physics simulation "sees".
+//
+// FIX — stale double-indirection through SortedIndices:
+//   NeighborsSearching.Dispatch() runs BuildSpatialLookup -> sort -> Reorder ->
+//   ReorderCopyBack every step. ReorderCopyBack physically rewrites
+//   _predictedPositionsBuffer into sorted order (SortTarget_PredictedPositions
+//   is copied back into _PredictedPositions at the SAME index). So by the time
+//   *anything* runs after that point in the frame — including this voxelizer,
+//   and including the sim's own DensityCalc.hlsl — _PredictedPositions is
+//   already arranged in sorted order and should be indexed directly with the
+//   loop counter `j`, exactly like DensityCalc.hlsl does:
+//       float3 other = _PredictedPositions[j];
+//   The previous version additionally applied `SortedIndices[j]` on top of
+//   that, which re-applies a mapping that was only valid *before* the
+//   copy-back rewrite happened — i.e. a stale double-indirection that looked
+//   up essentially the wrong particle for most voxels, and which particle was
+//   wrong changed every frame as the sort order shuffled. That's what produced
+//   the scrambled, blocky, splitting/reconnecting density field.
+//
+// HOW IT INTEGRATES:
+//   - Uses the SAME spatial hash buffers (SpatialKeys, SpatialOffsets) and the
+//     SAME _PredictedPositions buffer that FluidModel already keeps alive and
+//     GPU-sorted every frame.
+//   - Uses the SAME kernel constants (K_SpikyPow2, _SmoothingRadius, _Mass)
+//     that BindStaticUniforms() pushes to the FluidSPH compute shader.
+//     VoxelizeDensityPass.cs re-uses those same values on this shader.
+//   - Boundary is defined by _BoundaryLocalMin/_BoundaryLocalMax in
+//     collider-local space, identical to the simulation boundary.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#pragma kernel VoxelizeDensity
+
+// ── Output ────────────────────────────────────────────────────────────────────
+RWTexture3D<float> DensityMap;
+uint3 _DensityMapSize;
+
+// ── Simulation buffers (bound by VoxelizeDensityPass, same data as simulation) ─
+StructuredBuffer<float3> _PredictedPositions;
+StructuredBuffer<uint>   SpatialKeys;
+StructuredBuffer<uint>   SpatialOffsets;
+
+// ── Simulation uniforms (same as FluidSPH.compute) ────────────────────────────
+uint  _ParticleCount;
+float _SmoothingRadius;
+float _Mass;
+float K_SpikyPow2;          // set by FluidModel.SetSmoothingConstant()
+
+float3 _BoundaryLocalMin;
+float3 _BoundaryLocalMax;
+float4x4 _BoundaryLocalToWorld;
+
+// ── Spatial hash helpers (must match NeighborsSearching.hlsl exactly) ─────────
+static const uint hashK1 = 15823;
+static const uint hashK2 = 9737333;
+static const uint hashK3 = 440817757;
+static const uint UINT_MAX_VAL = 0xFFFFFFFF;
+
+static const int3 CellOffsets[27] =
+{
+    int3(-1,-1,-1), int3(0,-1,-1), int3(1,-1,-1),
+    int3(-1, 0,-1), int3(0, 0,-1), int3(1, 0,-1),
+    int3(-1, 1,-1), int3(0, 1,-1), int3(1, 1,-1),
+    int3(-1,-1, 0), int3(0,-1, 0), int3(1,-1, 0),
+    int3(-1, 0, 0), int3(0, 0, 0), int3(1, 0, 0),
+    int3(-1, 1, 0), int3(0, 1, 0), int3(1, 1, 0),
+    int3(-1,-1, 1), int3(0,-1, 1), int3(1,-1, 1),
+    int3(-1, 0, 1), int3(0, 0, 1), int3(1, 0, 1),
+    int3(-1, 1, 1), int3(0, 1, 1), int3(1, 1, 1)
+};
+
+int3 PositionToCellCoord(float3 pos, float radius) { return (int3)(floor(pos / radius)); }
+uint GetKey(uint hash, uint tableSize) { return hash % tableSize; }
+
+uint HashCell(int3 cell)
+{
+    const uint blockSize = 50;
+    uint3 ucell     = (uint3)(cell + (int)(blockSize / 2));
+    uint3 localCell = ucell % blockSize;
+    uint3 blockID   = ucell / blockSize;
+    uint blockHash  = blockID.x * hashK1 + blockID.y * hashK2 + blockID.z * hashK3;
+    return localCell.x + blockSize * (localCell.y + blockSize * localCell.z) + blockHash;
+}
+
+// SpikyPow2 density kernel — identical to CalculateDensityWeight() in FluidMath.hlsl
+float DensityWeight(float dst, float radius)
+{
+    if (dst >= radius) return 0.0;
+    float v = radius - dst;
+    return v * v * K_SpikyPow2;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+[numthreads(8, 8, 8)]
+void VoxelizeDensity(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _DensityMapSize.x || id.y >= _DensityMapSize.y || id.z >= _DensityMapSize.z)
+        return;
+
+    // Map voxel [0, size-1] → boundary local-space [min, max]
+    float3 t       = id / (float3(_DensityMapSize) - 1.0);
+    float3 localPos = lerp(_BoundaryLocalMin, _BoundaryLocalMax, t);
+
+    // Transform to world space (matching how particles live in world space)
+    float3 worldPos = mul(_BoundaryLocalToWorld, float4(localPos, 1.0)).xyz;
+
+    // Sample SPH density at worldPos using the sorted spatial hash
+    float sqrH = _SmoothingRadius * _SmoothingRadius;
+    float density = 0.0;
+
+    int3 centreCell = PositionToCellCoord(worldPos, _SmoothingRadius);
+
+    [unroll]
+    for (int n = 0; n < 27; n++)
+    {
+        int3 cell = centreCell + CellOffsets[n];
+        uint key  = GetKey(HashCell(cell), _ParticleCount);
+        uint start = SpatialOffsets[key];
+
+        if (start == UINT_MAX_VAL) continue;
+
+        for (uint j = start; j < _ParticleCount; j++)
+        {
+            if (SpatialKeys[j] != key) break;
+
+            float3 other = _PredictedPositions[j];
+            float3 delta = other - worldPos;
+            float  sqrD  = dot(delta, delta);
+
+            if (sqrD <= sqrH)
+            {
+                density += _Mass * DensityWeight(sqrt(sqrD), _SmoothingRadius);
+            }
+        }
+    }
+
+    DensityMap[id] = density;
+}

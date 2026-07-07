@@ -51,7 +51,7 @@ void ApplyIntegration(uint3 id)
     float3 velocity = _Velocities[id.x]; 
 
     position += velocity * _DeltaTime; 
-    ResolveCollisions(position, velocity); 
+    // ResolveCollisions(position, velocity); 
 
     _Positions[id.x] = position; 
     _Velocities[id.x] = velocity; 

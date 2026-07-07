@@ -10,6 +10,7 @@ public class FluidManager3D : MonoBehaviour
     [SerializeField] Material particleMaterial;
     [SerializeField] BucketGenerator bucket;
     [SerializeField] BucketFluidCollision3D bucketCollision;
+    [SerializeField] CanvasSurface canvasSurface;
 
     FluidModel _fluidModel;
 
@@ -93,7 +94,8 @@ public class FluidManager3D : MonoBehaviour
             boundaryVolume.WorldToColliderLocalMatrix,
             boundaryVolume.ColliderLocalToWorldMatrix,
             Vector3.zero,
-            0
+            0,
+            canvasSurface
         );
         // Simulation sub-steps
         for (int i = 0; i < iterationsPerFrame; i++)
@@ -188,15 +190,15 @@ public class FluidManager3D : MonoBehaviour
         if (_lastVelocityDisplayMax != settings.velocityDisplayMax)
             _renderSystem.SyncMaterial(settings);
 
-        if(_lastPressureSolverMethod != settings.pressureSolverMethod)
+        if (_lastPressureSolverMethod != settings.pressureSolverMethod)
         {
             _fluidModel.setPressureSolver(settings.pressureSolverMethod);
         }
-        if(_lastViscositySolverMethod != settings.viscositySolverMethod)
+        if (_lastViscositySolverMethod != settings.viscositySolverMethod)
         {
             _fluidModel.setViscositySolver(settings.viscositySolverMethod);
         }
-        if(_lastSurfaceTensionSolverMethod != settings.surfaceTensionSolverMethod)
+        if (_lastSurfaceTensionSolverMethod != settings.surfaceTensionSolverMethod)
         {
             _fluidModel.setSurfaceTensionSolver(settings.surfaceTensionSolverMethod);
         }

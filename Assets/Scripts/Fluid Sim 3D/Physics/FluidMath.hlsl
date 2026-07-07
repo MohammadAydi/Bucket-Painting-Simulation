@@ -119,7 +119,7 @@ float Math_DerivativeSpikyPow3(float dst, float radius) {
     return 0;
 }
 float Math_DerivativeSpikyPow2(float dst, float radius) {
-    if (dst <= radius) { float v = radius - dst; return - v * K_SpikyPow2Grad; }
+    if (dst <= radius) { float v = radius - dst; return -v * K_SpikyPow2Grad; }
     return 0;
 }
 

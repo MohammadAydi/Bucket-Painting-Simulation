@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 28fa03c07c6944b19237a75ee25d8289, type: 3}
   m_Name: ParticleSettings
   m_EditorClassIdentifier: Assembly-CSharp::ParticleSettings
-  particleCount: 196722
+  particleCount: 458065
   radius: 0.103
   segments: 32
   sphereResolution: 2
@@ -62,7 +62,7 @@ MonoBehaviour:
   highDensityColor: {r: 0.8301, g: 0.2914, b: 0.2075, a: 1}
   mass: 1
   gravity: -10
-  collisionDamping: 0.352
+  collisionDamping: 0
   pressureSolverMethod: 0
   pressureMultiplier: 288
   targetDensity: 660

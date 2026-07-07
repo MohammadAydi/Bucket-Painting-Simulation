@@ -7,6 +7,8 @@ using UnityEngine;
 
 public class FluidRendererSettings : MonoBehaviour
 {
+    public enum FluidRenderMode { ScreenSpace, Raymarch }
+    public FluidRenderMode renderMode;
     [Header("Particle Depth")]
     public float depthParticleSize = 0.15f;
 

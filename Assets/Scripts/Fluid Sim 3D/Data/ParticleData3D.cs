@@ -25,7 +25,9 @@ using UnityEngine;
 
 public struct SpawnData3D
 {
-    public float3[] positions;
-    public float3[] velocities;
-
+    public float3[]   positions;
+    public float3[]   velocities;
+    // Per-particle initial pigment color (linear RGBA, float4 = Vector4).
+    // Null when no pigment system is used; FluidModel treats null as "all white".
+    public Vector4[]  pigmentColors;
 }

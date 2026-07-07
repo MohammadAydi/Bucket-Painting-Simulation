@@ -62,6 +62,13 @@ class Config
     public static readonly int SortTarget_PositionsId = Shader.PropertyToID("SortTarget_Positions");
     public static readonly int SortTarget_PredictedPositionsId = Shader.PropertyToID("SortTarget_PredictedPositions");
     public static readonly int SortTarget_VelocitiesId = Shader.PropertyToID("SortTarget_Velocities");
+    // ── Pigment ───────────────────────────────────────────────────────────────
+    public static readonly int PigmentsId             = Shader.PropertyToID("_Pigments");
+    public static readonly int PigmentsWriteId        = Shader.PropertyToID("_PigmentsWrite");
+    public static readonly int SortTarget_PigmentsId  = Shader.PropertyToID("SortTarget_Pigments");
+    public static readonly int DiffusionCoeffId       = Shader.PropertyToID("_DiffusionCoeff");
+    // Shader-side: pigment buffer for rendering (set on the particle depth shader)
+    public static readonly int PigmentBufferShaderId  = Shader.PropertyToID("_Pigments");
 
     public static readonly int DebugId = Shader.PropertyToID("_debugBuffer");
 

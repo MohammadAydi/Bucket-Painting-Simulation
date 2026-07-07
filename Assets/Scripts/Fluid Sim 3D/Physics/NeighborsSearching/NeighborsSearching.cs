@@ -69,6 +69,9 @@ class NeighborsSearching
         _model.spatialHash.Run();
         _compute.Dispatch(_reorderKernel, realGroups, 1, 1);
         _compute.Dispatch(_reorderCopybackKernel, realGroups, 1, 1);
+        // Reorder pigment in lock-step with positions/velocities so that
+        // pigment[i] and position[i] always belong to the same particle.
+        _model.DispatchPigmentReorder();
     }
 
 }

@@ -37,6 +37,10 @@ public class FluidRendererFeature : ScriptableRendererFeature
         public int   iterations;
     }
 
+    // ── Pigment buffer shortcut — read from FluidManager3D each frame ─────────
+    // Null when no pigment system is active; ParticleDepthPass handles null safely.
+    public ComputeBuffer      pigmentBuffer       => fluidManager?.PigmentBuffer;
+
     // ── Shortcuts that read from the scene settings component ─────────────────
     public float              depthParticleSize   => settings ? settings.depthParticleSize   : 0.15f;
     public FluidBlurType      blurType            => settings ? settings.blurType            : FluidBlurType.Bilateral1D;

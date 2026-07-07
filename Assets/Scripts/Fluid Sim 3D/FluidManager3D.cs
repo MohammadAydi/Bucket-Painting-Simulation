@@ -11,6 +11,11 @@ public class FluidManager3D : MonoBehaviour
     [SerializeField] BucketGenerator bucket;
     [SerializeField] BucketFluidCollision3D bucketCollision;
     [SerializeField] CanvasSurface canvasSurface;
+    [Header("Pigment (optional)")]
+    [Tooltip("Assign the PigmentDiffusion compute shader to enable per-particle pigment.")]
+    [SerializeField] ComputeShader pigmentComputeShader;
+    [Tooltip("Assign a PigmentSettings asset to control diffusion and spawn colors.")]
+    [SerializeField] PigmentSettings pigmentSettings;
 
     FluidModel _fluidModel;
 
@@ -49,6 +54,7 @@ public class FluidManager3D : MonoBehaviour
     public ComputeBuffer PositionsBuffer => _fluidModel?.PositionsBuffer;
     public ComputeBuffer VelocitiesBuffer => _fluidModel?.VelocitiesBuffer;
     public int ParticleCount => _fluidModel?.ParticleCount ?? 0;
+    public ComputeBuffer PigmentBuffer    => _fluidModel?.PigmentBuffer;
 
     void Awake()
     {
@@ -86,6 +92,7 @@ public class FluidManager3D : MonoBehaviour
     void RunSimulationFrame(float frameDeltaTime)
     {
         float subStepDeltaTime = frameDeltaTime / iterationsPerFrame;
+        _fluidModel.BindPigmentUniforms(pigmentSettings, settings, subStepDeltaTime);
         _fluidModel.BindStaticUniforms(
             settings,
             subStepDeltaTime,
@@ -109,7 +116,7 @@ public class FluidManager3D : MonoBehaviour
 
         if (!_initialized || boundaryVolume == null) return;
         Bounds bounds = boundaryVolume.WorldBounds;
-        _renderSystem.Render(_fluidModel.ParticleCount, bounds);
+        // _renderSystem.Render(_fluidModel.ParticleCount, bounds);
 
     }
 
@@ -132,14 +139,18 @@ public class FluidManager3D : MonoBehaviour
             bucketCollision = FindAnyObjectByType<BucketFluidCollision3D>();
 
         _spawnSystem = new SpawnSystem3D(settings);
-        SpawnData3D spawnData = (bucket != null) ? _spawnSystem.SpawnParticlesInBucket(bucket) : _spawnSystem.SpawnParticles(boundaryVolume);
-        _fluidModel = new FluidModel(spawnData, settings, fluidComputeShader);
+        SpawnData3D spawnData = (bucket != null)
+            ? _spawnSystem.SpawnParticlesInBucket(bucket, pigmentSettings)
+            : _spawnSystem.SpawnParticles(boundaryVolume, pigmentSettings);
+        _fluidModel = new FluidModel(spawnData, settings, fluidComputeShader,
+                                     pigmentComputeShader, pigmentSettings);
         _fluidModel.SetSmoothingConstant(settings.smoothingRadius);
         if (particleMaterial == null)
             particleMaterial = new Material(Shader.Find("Fluid/ParticleCircle3D"));
 
         _renderSystem = new RenderSystem3D(particleMaterial);
-        _renderSystem.Initialize(settings, _fluidModel.PositionsBuffer, _fluidModel.VelocitiesBuffer);
+        _renderSystem.Initialize(settings, _fluidModel.PositionsBuffer,
+                                 _fluidModel.VelocitiesBuffer, _fluidModel.PigmentBuffer);
         CacheSettings();
         _initialized = true;
     }
@@ -190,15 +201,15 @@ public class FluidManager3D : MonoBehaviour
         if (_lastVelocityDisplayMax != settings.velocityDisplayMax)
             _renderSystem.SyncMaterial(settings);
 
-        if (_lastPressureSolverMethod != settings.pressureSolverMethod)
+        if(_lastPressureSolverMethod != settings.pressureSolverMethod)
         {
             _fluidModel.setPressureSolver(settings.pressureSolverMethod);
         }
-        if (_lastViscositySolverMethod != settings.viscositySolverMethod)
+        if(_lastViscositySolverMethod != settings.viscositySolverMethod)
         {
             _fluidModel.setViscositySolver(settings.viscositySolverMethod);
         }
-        if (_lastSurfaceTensionSolverMethod != settings.surfaceTensionSolverMethod)
+        if(_lastSurfaceTensionSolverMethod != settings.surfaceTensionSolverMethod)
         {
             _fluidModel.setSurfaceTensionSolver(settings.surfaceTensionSolverMethod);
         }

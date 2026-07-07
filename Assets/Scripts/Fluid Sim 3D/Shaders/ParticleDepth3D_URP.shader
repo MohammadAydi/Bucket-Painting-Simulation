@@ -41,8 +41,13 @@ Shader "Fluid/ParticleDepth3D_URP"
             // URP core includes (replaces UnityCG.cginc)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            // ── Particle positions — flat float3 buffer, matches PhysicsSystem3D ─
-            StructuredBuffer<float3> Positions; // C# sets this via SetBuffer("Positions", PositionsBuffer)
+            // ── Particle data buffers ──────────────────────────────────────────
+            StructuredBuffer<float3> Positions; // set via SetBuffer("Positions", PositionsBuffer)
+            // Pigment buffer — float4 linear RGBA per particle.
+            // Declared as a raw buffer so the shader compiles even when the C#
+            // side has not yet set it (e.g. when no PigmentSettings is assigned).
+            // The shader falls back to opaque white in that case.
+            StructuredBuffer<float4> _Pigments;
             float scale;
 
             // ── Vertex/fragment structs ────────────────────────────────────────
@@ -55,8 +60,9 @@ Shader "Fluid/ParticleDepth3D_URP"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float2 uv : TEXCOORD0;
+                float2 uv         : TEXCOORD0;
                 float3 positionWS : TEXCOORD1;
+                float4 pigment    : TEXCOORD2; // linear RGBA pigment from buffer
             };
 
             // ── Vertex shader ──────────────────────────────────────────────────
@@ -79,7 +85,10 @@ Shader "Fluid/ParticleDepth3D_URP"
 
                 OUT.positionCS = mul(UNITY_MATRIX_VP, float4(worldPos, 1.0));
                 OUT.positionWS = worldPos;
-                OUT.uv = IN.uv;
+                OUT.uv         = IN.uv;
+                // Read per-particle pigment color from GPU buffer.
+                // Falls back to opaque white when the buffer is not set.
+                OUT.pigment    = _Pigments[instanceID];
                 return OUT;
             }
 
@@ -95,23 +104,34 @@ Shader "Fluid/ParticleDepth3D_URP"
                 return (1.0 - depth01 * _ZBufferParams.y) / (depth01 * _ZBufferParams.x);
             }
 
+            // ── MRT fragment output ────────────────────────────────────────────
+            struct FragOutput
+            {
+                float4 depth   : SV_Target0; // R32_SFloat depth RT (existing)
+                float4 pigment : SV_Target1; // RGBA16F  pigment color RT (new)
+            };
+
             // ── Fragment shader ────────────────────────────────────────────────
-            float4 frag(Varyings IN, out float outDepth : SV_Depth) : SV_Target
+            FragOutput frag(Varyings IN, out float outDepth : SV_Depth)
             {
                 // Circular disc mask — discard corners outside the sphere cross-section
                 float2 centreOffset = (IN.uv - 0.5) * 2.0;
-                float sqrDst = dot(centreOffset, centreOffset);
+                float  sqrDst       = dot(centreOffset, centreOffset);
                 clip(1.0 - sqrDst); // discard if outside unit circle
 
                 // Reconstruct sphere front surface depth
-                float z = sqrt(1.0 - sqrDst);
+                float z    = sqrt(1.0 - sqrDst);
                 float dcam = length(IN.positionWS - _WorldSpaceCameraPos);
-                float linearDepth = dcam - z * scale;
 
                 float3 viewPos = mul(UNITY_MATRIX_V, float4(IN.positionWS, 1.0)).xyz;
-                float eyeDepth = -viewPos.z - z * scale; // camera looks down -Z in view space
+                float eyeDepth = -viewPos.z - z * scale;
                 outDepth = LinearDepthToClipDepth(eyeDepth);
-                return float4(eyeDepth, 0, 0, eyeDepth);
+
+                FragOutput o;
+                o.depth   = float4(eyeDepth, 0, 0, eyeDepth);
+                // Write particle pigment color (already linear RGBA from buffer)
+                o.pigment = IN.pigment;
+                return o;
             }
             ENDHLSL
         }

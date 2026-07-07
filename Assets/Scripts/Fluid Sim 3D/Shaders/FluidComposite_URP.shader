@@ -26,6 +26,11 @@ Shader "Fluid/FluidComposite_URP"
             SAMPLER(sampler_CompTex);
             TEXTURE2D(_NormalTex);
             SAMPLER(sampler_NormalTex);
+            // Per-pixel pigment color written by the particle depth pass (MRT).
+            // When no pigment system is active, this RT is cleared to (0,0,0,0)
+            // and the shader falls back to the global _PaintColor.
+            TEXTURE2D(_PigmentColorTex);
+            SAMPLER(sampler_PigmentColorTex);
 
             float4 _PaintColor;
             float _SpecularStrength;
@@ -61,7 +66,16 @@ Shader "Fluid/FluidComposite_URP"
                 float3 V = -WorldViewDir(uv);
                 float3 H = normalize(L + V);
 
-                float3 paintCol = _PaintColor.rgb;
+                // Per-pixel pigment color from the particle depth pass (MRT).
+                // _PigmentColorTex stores linear-space RGBA written directly by
+                // the particle shader from the per-particle pigment buffer.
+                // When the pigment system is active its alpha is 1 on fluid pixels;
+                // fall back to the global _PaintColor when alpha is 0 (no pigment
+                // buffer assigned or particle system disabled).
+                float4 pigmentSample = SAMPLE_TEXTURE2D(_PigmentColorTex, sampler_PigmentColorTex, uv);
+                float3 paintCol = (pigmentSample.a > 0.01)
+                    ? pigmentSample.rgb
+                    : _PaintColor.rgb;
                 float3 lightCol = mainLight.color;
 
                 // ── Ambient ───────────────────────────────────────────────────

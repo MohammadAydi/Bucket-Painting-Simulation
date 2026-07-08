@@ -8,8 +8,8 @@ public class BucketHandleGenerator : MonoBehaviour
     [SerializeField] private BucketGenerator bucketGenerator;
 
     [Header("Handle Dimensions")]
-    [Range(0.0002f, 0.2f)] public float handleWidth =0.0131f;
-    [Range(0.0001f, 0.1f)] public float handleThickness = 0.0083f;  
+    [Range(0.002f, 2f)] public float handleWidth =0.2f;
+    [Range(0.001f, 1f)] public float handleThickness = 0.1f;  
     [Range(8, 64)] public int handleSegments = 40;               
     public float clearance = 0.001f;                              
 

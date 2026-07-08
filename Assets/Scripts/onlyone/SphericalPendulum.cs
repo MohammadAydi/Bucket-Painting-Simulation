@@ -46,6 +46,10 @@ namespace onlyone
         private double accumulator;
         private RopeState state;
 
+        private bool manualFreeze;
+        public bool IsManualFrozen => manualFreeze;
+        public void SetManualFreeze(bool frozen) => manualFreeze = frozen;
+
         private const double MinSin = 1e-3;
         private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
  
@@ -120,6 +124,7 @@ namespace onlyone
         private void Update()
         {
             if (externallyDriven) return;   // الحبل يقود، لا تكامل هنا.
+            if (manualFreeze) return;       // Manual Manipulation Mode: freeze RK4 too.
 
             accumulator += Time.deltaTime;
             if (accumulator > 0.25) accumulator = 0.25;
@@ -201,7 +206,10 @@ namespace onlyone
         }
         private void OnGUI()
         {
-            GUILayout.BeginArea(new Rect(10, 10, 300, 180), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(10, 10, 300, 200), GUI.skin.box);
+
+            if (manualFreeze)
+                GUILayout.Label("<< MANUAL MANIPULATION MODE >>");
 
             GUILayout.Label($"Effective Length : {EffectiveLength:F4} m");
             GUILayout.Label($"Theta            : {Theta * Mathf.Rad2Deg:F2}°");
@@ -215,3 +223,5 @@ namespace onlyone
         }
     }
 }
+
+

@@ -3,7 +3,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-public static class FolderTreeExporter
+public static class FolderTreeExporterCombined
 {
     // Add the folders you want to export here
     private static readonly string[] FolderPaths =
@@ -18,9 +18,26 @@ public static class FolderTreeExporter
         // "Assets/physics"
     };
 
-    [MenuItem("Tools/Export Folder Trees")]
-    private static void ExportFolderTrees()
+    [MenuItem("Tools/Export Folder Trees (Combined)")]
+    private static void ExportFolderTreesCombined()
     {
+        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+
+        if (FolderPaths.Length == 0)
+        {
+            Debug.LogWarning("No folders specified for export.");
+            return;
+        }
+
+        StringBuilder combinedBuilder = new StringBuilder();
+        
+        // Add header with timestamp
+        combinedBuilder.AppendLine("=== Combined Folder Tree Export ===");
+        combinedBuilder.AppendLine($"Generated: {System.DateTime.Now}");
+        combinedBuilder.AppendLine("====================================\n");
+
+        int exportedCount = 0;
+
         foreach (string rootFolder in FolderPaths)
         {
             if (!Directory.Exists(rootFolder))
@@ -29,20 +46,30 @@ public static class FolderTreeExporter
                 continue;
             }
 
-            StringBuilder builder = new StringBuilder();
+            combinedBuilder.AppendLine($"\n--- {Path.GetFileName(rootFolder)} ---");
+            combinedBuilder.AppendLine($"Path: {rootFolder}");
+            combinedBuilder.AppendLine();
 
-            builder.AppendLine(Path.GetFileName(rootFolder));
+            // Write the tree structure
+            WriteDirectory(rootFolder, combinedBuilder, "");
 
-            WriteDirectory(rootFolder, builder, "");
-
-            string outputPath = Path.Combine(rootFolder, "FolderTree.txt");
-
-            File.WriteAllText(outputPath, builder.ToString());
-
-            Debug.Log($"Exported: {outputPath}");
+            exportedCount++;
         }
 
-        EditorUtility.RevealInFinder(FolderPaths[0]);
+        if (exportedCount == 0)
+        {
+            Debug.LogWarning("No valid folders found to export.");
+            return;
+        }
+
+        string outputPath = Path.Combine(projectRoot, "CombinedFolderTrees.txt");
+        File.WriteAllText(outputPath, combinedBuilder.ToString());
+
+        Debug.Log($"Exported combined folder trees to: {outputPath}");
+        Debug.Log($"Total folders exported: {exportedCount}");
+
+        // Reveal the file in Finder/Explorer
+        EditorUtility.RevealInFinder(outputPath);
     }
 
     private static void WriteDirectory(string directory, StringBuilder builder, string indent)

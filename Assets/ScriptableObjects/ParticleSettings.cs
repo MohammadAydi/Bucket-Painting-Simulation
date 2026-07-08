@@ -17,10 +17,10 @@ public class ParticleSettings : ScriptableObject
     // FluidCompute3D.compute. No other C# or shader plumbing changes needed.
 
     [Header("Count & Shape")]
-    [Range(1, 1000000)]
+    [Range(2, 1000000)]
     public int particleCount = 400000;
-    [Range(0.01f, 1f)]
-    public float radius = 0.04f;
+    [Range(0.001f, 1f)]
+    public float radius = 0.01f;
     [Range(3, 32)]
     public int segments = 8;
 

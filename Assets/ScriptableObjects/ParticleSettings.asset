@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 28fa03c07c6944b19237a75ee25d8289, type: 3}
   m_Name: ParticleSettings
   m_EditorClassIdentifier: Assembly-CSharp::ParticleSettings
-  particleCount: 258065
-  radius: 0.103
+  particleCount: 1000000
+  radius: 0.01
   segments: 32
   sphereResolution: 2
   particleSpacing: 0.0001
@@ -68,7 +68,7 @@ MonoBehaviour:
   targetDensity: 660
   nearPressureMultiplier: 2.16
   viscositySolverMethod: 0
-  viscosityCoeff: 0
+  viscosityCoeff: 206
   surfaceTensionSolverMethod: 0
   surfaceTensionCoeff: 0
   surfaceTensionThreshold: 0

@@ -6,14 +6,13 @@ namespace onlyone
     [DisallowMultipleComponent]
     public class SphericalPendulum : MonoBehaviour
     {
-        private const float UnitsPerMeter = 100f;
         [Header("Scene References")]
         [SerializeField] private Transform pivot;
         [SerializeField] private Transform bob;
 
         [Header("Suspension")]
-        [Tooltip("Rope length l (سم). يُستخدم للرسم في الوضع المستقل فقط.")]
-        [SerializeField, Min(0.01f)] public float length = 120f;
+        [Tooltip("Rope length l (meters). يُستخدم للرسم في الوضع المستقل فقط.")]
+        [SerializeField, Min(0.01f)] public float length = 1.2f;
 
         [Tooltip("يُطفئه PbdRope عند الاقتران، فيتوقّف النواس عن تحريك الدلو.")]
         public bool driveBucket = true;
@@ -29,15 +28,15 @@ namespace onlyone
         [SerializeField] private float startPhiDot;
 
         [Header("Environment (الوضع المستقل فقط)")]
-        [SerializeField] private float gravity = 981f;
-        [SerializeField, Min(0f)] private float airDensity = 0.000001225f;
-        [Tooltip("احتكاك المحور f (1/s). معدّل زمني بحت، لا يتأثر بوحدة الطول.")]
+        [SerializeField] private float gravity = 9.81f;
+        [SerializeField, Min(0f)] private float airDensity = 1.225f;
+        [Tooltip("احتكاك المحور f (1/s).")]
         [SerializeField, Min(0f)] private float pivotFriction = 0.02f;
 
         [Header("Bucket")]
         [SerializeField, Min(0.001f)] private float mass = 3.0f;
-        [SerializeField, Min(0f)] private float bucketRadius = 13f;
-        [Tooltip("Cd. ~0.47 كرة، ~1.0 دلو مفتوح. بلا أبعاد، بلا تغيير.")]
+        [SerializeField, Min(0f)] private float bucketRadius = 0.13f;
+        [Tooltip("Cd. ~0.47 كرة، ~1.0 دلو مفتوح.")]
         [SerializeField, Min(0f)] private float dragCoefficient = 1.0f;
 
         [Header("Integration (الوضع المستقل فقط)")]
@@ -46,6 +45,10 @@ namespace onlyone
         private double th, ph, thDot, phDot;
         private double accumulator;
         private RopeState state;
+
+        private bool manualFreeze;
+        public bool IsManualFrozen => manualFreeze;
+        public void SetManualFreeze(bool frozen) => manualFreeze = frozen;
 
         private const double MinSin = 1e-3;
         private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
@@ -121,6 +124,7 @@ namespace onlyone
         private void Update()
         {
             if (externallyDriven) return;   // الحبل يقود، لا تكامل هنا.
+            if (manualFreeze) return;       // Manual Manipulation Mode: freeze RK4 too.
 
             accumulator += Time.deltaTime;
             if (accumulator > 0.25) accumulator = 0.25;
@@ -198,21 +202,26 @@ namespace onlyone
             Gizmos.color = new Color(0.2f, 0.6f, 1f, 0.12f);
             Gizmos.DrawWireSphere(pivot.position, length);
             Gizmos.color = Color.yellow;
-            Gizmos.DrawSphere(pivot.position, 0.03f * UnitsPerMeter);
+            Gizmos.DrawSphere(pivot.position, 0.03f);
         }
-
         private void OnGUI()
         {
-            GUILayout.BeginArea(new Rect(10, 10, 300, 180), GUI.skin.box);
-            GUILayout.Label($"Effective Length : {EffectiveLength:F4} cm");
+            GUILayout.BeginArea(new Rect(10, 10, 300, 200), GUI.skin.box);
+
+            if (manualFreeze)
+                GUILayout.Label("<< MANUAL MANIPULATION MODE >>");
+
+            GUILayout.Label($"Effective Length : {EffectiveLength:F4} m");
             GUILayout.Label($"Theta            : {Theta * Mathf.Rad2Deg:F2}°");
             GUILayout.Label($"Phi              : {Phi * Mathf.Rad2Deg:F2}°");
             GUILayout.Label($"ThetaDot         : {ThetaDot:F3} rad/s");
             GUILayout.Label($"PhiDot           : {PhiDot:F3} rad/s");
-            GUILayout.Label($"Tension : {Tension / UnitsPerMeter:F2} N");
-            GUILayout.Label($"Energy  : {TotalEnergy / (UnitsPerMeter * UnitsPerMeter):F3} J");
+            GUILayout.Label($"Tension : {Tension:F2} N");
+            GUILayout.Label($"Energy  : {TotalEnergy:F3} J");
 
             GUILayout.EndArea();
         }
     }
 }
+
+

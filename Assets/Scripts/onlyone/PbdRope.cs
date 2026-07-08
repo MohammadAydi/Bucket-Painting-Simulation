@@ -17,18 +17,19 @@ namespace onlyone
         [SerializeField, Range(2, 80)]       private int   segments = 26;
         [SerializeField, Min(0.01f)]         private float ropeLength = 1.22f;
         [SerializeField, Min(0.0005f)]       private float ropeWidth = 0.008f;
-        [SerializeField, Range(0.00001f, 0.1f)] private float linearDensity = 0.001f;
+        [SerializeField, Range(0.001f, 10f)] private float linearDensity = 0.1f;
+
         [Header("Solver (XPBD + Substeps)")]
         [Tooltip("خطوات فرعية لكل fixedStep. Macklin 2019: خطأ XPBD الزمني ∝ dt²، " +
                  "فالتقسيم يتفوق على رفع التكرارات في حفظ الطاقة.")]
         [SerializeField, Range(1, 8)] private int substeps = 4;
         [SerializeField, Range(1, 80)] private int constraintIterations = 8;
-
+        [Tooltip("امتثال قيد المسافة α (m/N). XPBD Eq.24: α̃ = α/dt².")]
         [SerializeField, Min(0f)] private float compliance = 0.00004f;
         [Tooltip("تخميد داخلي σ (1/s): v ← v·exp(−σ·dt). مستقل عن حجم الخطوة. " +
                  "(نموذج لزج قياسي — ليس من DER/XPBD.)")]
         [SerializeField, Min(0f)] private float internalDampingRate = 0.05f;
-
+        [Tooltip("حاجز أمان ضد الانفجار العددي فقط.")]
         [SerializeField, Range(1f, 1.4f)] private float stretchLimit = 1.2f;
         [Tooltip("β̃ لقيد المسافة (XPBD Eq.26): يخمد تشوّه القطعة دون تخميد الحركة المكانية.")]
         [SerializeField, Min(0f)] private float stretchDampingBeta;
@@ -65,58 +66,65 @@ namespace onlyone
         [SerializeField, Min(0f)] private float torsionalStiffness = 25f;
         [Tooltip("نسبة تخميد رايلي ζ: retention=exp(−2ζω_n·dt), ω_n=√(k_t/I). موحّدة عبر العقد.")]
         [SerializeField, Range(0f, 1f)] private float dampingRatio = 0.10f;
-        [Tooltip("نصف قطر مقطع الحبل (م) — كمية هندسية واحدة تُغذّي: القصور الذاتي التوائي، " +
-                 "الجساءتين (انحناء/التواء)، ومساحة المقطع لحساب الإجهاد. لا تكرّرها في أي مكان آخر.")]
-        [SerializeField, Min(0.0005f)] private float ropeRadius = 0.004f;
+        [Tooltip("نصف قطر الحبل لقصور الحواف I=½mr².")]
+        [SerializeField, Min(0.0005f)] private float torsionRadius = 0.015f;
         [SerializeField, Range(1, 40)] private int torsionIterations = 8;
         [Tooltip("المحور مثبّت دورانياً (شرط حدّي: θ₀=0, w₀=0).")]
         [SerializeField] private bool clampPivotTwist = true;
         [Tooltip("حاجز أمان (rad/s).")]
         [SerializeField, Min(1f)] private float maxTwistRate = 600f;
-
-
-        [SerializeField, Min(0.000001f)] private float density = 0.00114f;
-
-        [SerializeField, Min(1000f)] private float youngModulus = 3e8f;
-
-        [SerializeField, Range(0f, 0.5f)] private float poissonRatio = 0.4f;
-
-        [SerializeField] private bool breakable = true;
-
-        [SerializeField, Min(1000f)] private float ultimateStress = 6e7f;
-
-        [SerializeField, Min(1f)] private float safetyFactor = 1.2f;
-
-        [SerializeField, Range(0f, 1f)] private float breakingStrain;
-
-        [SerializeField] private bool allowPlasticFailure;
-        [SerializeField, Range(0.3f, 0.95f)] private float yieldStressRatio = 0.7f;
-        public float CurrentTensionN     { get; private set; }
-        public float CurrentStressPa     { get; private set; }
-        public float UltimateStressPa    => ultimateStress;
-        public float CurrentSafetyFactor { get; private set; } = float.PositiveInfinity;
-        public float EffectiveRopeLength { get; private set; }
-        public bool  IsBroken            { get; private set; }
-        public int   BreakIndex          { get; private set; } = -1;
+        private Quaternion prevBucketRotation;
         // سرعة الدلو المنشورة لكل فريم فيزيائي: يقرأها BucketFluidCollision3D لمعالجة الحركة السريعة (سويپت).
         public Vector3 BucketLinearVelocity  { get; private set; }
         public Vector3 BucketAngularVelocity { get; private set; } // rad/s, world space
         public bool    RopeReady => ready;
-        private LineRenderer fallenLr;
-        private Vector3[]    topPiecePos, bottomPiecePos;
-        private float[]      plasticStretch;
-        [SerializeField] private bool deriveFromMaterial = true;
+        public bool  IsBroken            { get; private set; }
+        public int   BreakIndex          { get; private set; } = -1;
+        // =====================================================================
+        // MANUAL MANIPULATION MODE - المتغيرات المضافة
+        // =====================================================================
+        [Header("Manual Manipulation Mode")]
+        [Tooltip("أدنى مسافة مسموحة بين الدلو والمحور أثناء التحكم اليدوي، لتفادي الانفراد العددي قرب المحور. " +
+                 "لا تُغيّر طول الحبل الاسمي (ropeLength) بأي حال — هي فقط تحدّ حركة اليد.")]
+        [SerializeField, Min(0.01f)] private float minimumManualDistance = 0.25f;
+        [Tooltip("عدد العُقد الأخيرة (بما فيها الدلو نفسه) التي تتجمّد معاً لتشكيل ‘مقبض’ صلب أثناء " +
+                 "التحكم اليدوي. يمنع اهتزاز/جنون الدلو عند السحب السريع بمنح الحلّال قاعدة صلبة ذات " +
+                 "ذراع حقيقي بدل نقطة واحدة عديمة القصور الدوراني. يُقصّ تلقائياً إلى مدى آمن عند الدخول.")]
+        [SerializeField, Min(1)] private int manualFrozenNodesCount = 3;
+
+        // ── حالة الوضع اليدوي الحالية ──
+        public bool IsManualMode { get; private set; }
+        public float RopeLength => ropeLength;
+        public float MinimumManualDistance => minimumManualDistance;
+        public Vector3 PivotPosition => pivot ? pivot.position : transform.position;
+        public Vector3 CurrentBucketPosition =>
+            (ready && pos != null && n > 0) ? pos[n - 1]
+            : (bucketBody ? bucketBody.position : transform.position);
+
+        // ── حالة المقبض الصلب (Kinematic Handle) ──
+        private int handleSize;
+        private int handleFirstIdx;
+        private float[] cachedHandleInvMass;
+        private Vector3[] handleOffset;
+        private Vector3 manualTarget;
+
+        // ── متغيرات تتبع السرعة في الوضع اليدوي ──
+        private Vector3 previousManualTarget;
+        private Vector3 manualVelocity;
+        private bool hasPreviousTarget = false;
+
         private LineRenderer lr;
         private int n; private float segLen;
         private Vector3[] pos, prev, renderPos;
         private float[] invMass, lambda, lambdaBend;
         private float accumulator; private bool ready;
         private float bucketTension;
+        private float lastSubstep;
 
         private float[]   twist, twistPrev, invInertia, lambdaTw, refTwist;
         private Vector3[] tangent, prevTangent, refDir;
         private float     lastAppliedTwist;
-        private Quaternion prevBucketRotation;
+
         public float  TensionN     => bucketTension;
         public double TotalEnergyJ => currentState.totalEnergy;
         private RopeState currentState;
@@ -128,6 +136,15 @@ namespace onlyone
                 Debug.LogError($"[{nameof(PbdRope)}] 'pivot' and 'bob' must be assigned.", this);
                 enabled = false; return;
             }
+
+            // التحقق من وجود bobOverride عند استخدام dynamicBucket
+            if (dynamicBucket && !bobOverride)
+            {
+                Debug.LogWarning(
+                    $"[{nameof(PbdRope)}] dynamicBucket is true but bobOverride is not assigned. " +
+                    "The rope will connect to the bucket's position instead of the handle midpoint.", this);
+            }
+
             InitializeRope();
         }
 
@@ -157,64 +174,40 @@ namespace onlyone
             initialTurns          = c.initialTurns;
             torsionalStiffness    = c.torsionalStiffness;
             dampingRatio          = c.dampingRatio;
+            // torsionRadius         = c.torsionRadius;
             torsionIterations     = Mathf.Max(1, c.torsionIterations);
             clampPivotTwist       = c.clampPivotTwist;
             maxTwistRate          = c.maxTwistRate;
-             density             = c.density;
-            youngModulus        = c.youngModulus;
-            poissonRatio        = c.poissonRatio;
-            deriveFromMaterial  = c.deriveFromMaterial;
-            ropeRadius          = c.ropeRadius;
-            breakable           = c.breakable;
-            ultimateStress      = c.ultimateStress;
-            safetyFactor        = c.safetyFactor;
-            breakingStrain      = c.breakingStrain;
-            allowPlasticFailure = c.allowPlasticFailure;
-            yieldStressRatio    = c.yieldStressRatio;
 
             if (pivot && bob) InitializeRope();
-        }
-        private void DeriveFromMaterialProperties()
-        {
-            if (!deriveFromMaterial) return;
-
-            float area = Mathf.PI * ropeRadius * ropeRadius;
-            float I = (Mathf.PI / 4f) * Mathf.Pow(ropeRadius, 4);
-            float j = 2f * I;
-            float g    = youngModulus / (2f * (1f + poissonRatio));
-
-            linearDensity = density * area;
-
-            compliance = segLen / Mathf.Max(1e-9f, youngModulus * area);
-
-            bendingStiffness = youngModulus * I / Mathf.Max(1e-9f, segLen);
-
-            torsionalStiffness = g * j / Mathf.Max(1e-9f, segLen);
         }
 
         private void InitializeRope()
         {
             ready = false;
 
-            IsBroken = false;
-            BreakIndex = -1;
-
-            if (fallenLr)
-            {
-                Destroy(fallenLr.gameObject);
-                fallenLr = null;
-            }
+            // إعادة تعيين حالة الوضع اليدوي عند إعادة التهيئة
+            IsManualMode = false;
+            handleSize = 0;
+            handleFirstIdx = 0;
+            cachedHandleInvMass = null;
+            handleOffset = null;
+            manualTarget = Vector3.zero;
+            previousManualTarget = Vector3.zero;
+            manualVelocity = Vector3.zero;
+            hasPreviousTarget = false;
 
             if (pendulum)
             {
-                pendulum.driveBucket      = !dynamicBucket;
-                pendulum.externallyDriven = dynamicBucket;
+                bool coupled = dynamicBucket;
+                pendulum.driveBucket      = !coupled;
+                pendulum.externallyDriven = coupled;
             }
 
             lr = GetComponent<LineRenderer>();
-
             n = segments + 1;
             segLen = ropeLength / segments;
+            lastSubstep = fixedStep / substeps;
 
             pos        = new Vector3[n];
             prev       = new Vector3[n];
@@ -222,12 +215,7 @@ namespace onlyone
             invMass    = new float[n];
             lambda     = new float[segments];
             lambdaBend = new float[n];
-
-            plasticStretch = new float[segments];
-
             accumulator = 0f;
-
-            DeriveFromMaterialProperties();
 
             BuildMasses();
             InitLineRenderer();
@@ -241,7 +229,6 @@ namespace onlyone
             InitTorsion();
 
             ready = true;
-
             BuildRenderPositions(1f);
             Render();
         }
@@ -254,27 +241,22 @@ namespace onlyone
             if (accumulator > 0.25f) accumulator = 0.25f;
 
             float h = fixedStep / substeps;
+            lastSubstep = h;
             bool moved = false;
             while (accumulator >= fixedStep)
             {
                 for (int s = 0; s < substeps; s++)
                 {
                     Step(h);
-
-                    if (enableTorsion)
-                        SolveTorsion(h);
+                    if (enableTorsion) SolveTorsion(h);
                 }
-
-                if (dynamicBucket && pendulum && !IsBroken)
-                    PublishState(h);
-
+                if (dynamicBucket && pendulum) PublishState(h);
                 accumulator -= fixedStep;
                 moved = true;
             }
 
             BuildRenderPositions(accumulator / fixedStep);
-            if (dynamicBucket)
-                DriveBucket(moved ? fixedStep : Time.deltaTime);
+            if (dynamicBucket)   DriveBucket(moved ? fixedStep : Time.deltaTime);
             Render();
         }
 
@@ -357,7 +339,7 @@ namespace onlyone
             refDir      = new Vector3[segments];
 
             float mEdge = Mathf.Max(1e-9f, linearDensity * segLen);
-            float iedge = 0.5f * mEdge * ropeRadius * ropeRadius;
+            float iedge = 0.5f * mEdge * torsionRadius * torsionRadius;
             for (int i = 0; i < segments; i++) invInertia[i] = 1f / Mathf.Max(1e-12f, iedge);
 
             if (dynamicBucket)
@@ -394,13 +376,12 @@ namespace onlyone
 
         private void Step(float dt)
         {
-            float dt2 = dt * dt;
-            float alphaStretch = compliance / dt2;
-            bool  solveBending  = enableBending && bendingStiffness > 1e-9f;
-            float alphaBend     = solveBending ? (1f / bendingStiffness) / dt2 : 0f;
+            float alphaStretch = compliance / (dt * dt);
+            float alphaBend = (bendingStiffness > 1e-9f)
+                            ? (1f / bendingStiffness) / (dt * dt) : 0f;
 
             Array.Clear(lambda, 0, segments);
-            if (solveBending) Array.Clear(lambdaBend, 0, n);
+            Array.Clear(lambdaBend, 0, n);
 
             float retention = Mathf.Exp(-internalDampingRate * dt);
             Vector3 accDt2 = (Vector3.down * gravity + wind) * (dt * dt);
@@ -432,17 +413,13 @@ namespace onlyone
             for (int k = 0; k < constraintIterations; k++)
             {
                 bool fwd = (k & 1) == 0;
-                if (fwd) for (int i = 0; i < segments; i++)
-                    { if (IsBroken && i == BreakIndex) continue; SolveSegment(i, alphaStretch, stretchDampingBeta); }
-                else     for (int i = segments - 1; i >= 0; i--)
-                    { if (IsBroken && i == BreakIndex) continue; SolveSegment(i, alphaStretch, stretchDampingBeta); }
+                if (fwd) for (int i = 0; i < segments; i++)      SolveSegment(i, alphaStretch, stretchDampingBeta);
+                else     for (int i = segments - 1; i >= 0; i--) SolveSegment(i, alphaStretch, stretchDampingBeta);
 
-                if (solveBending)
+                if (enableBending)
                 {
-                    if (fwd) for (int i = 1; i < n - 1; i++)
-                        { if (IsBroken && (i-1 == BreakIndex || i == BreakIndex)) continue; SolveBend(i, alphaBend); }
-                    else     for (int i = n - 2; i >= 1; i--)
-                        { if (IsBroken && (i-1 == BreakIndex || i == BreakIndex)) continue; SolveBend(i, alphaBend); }
+                    if (fwd) for (int i = 1; i < n - 1; i++)  SolveBend(i, alphaBend);
+                    else     for (int i = n - 2; i >= 1; i--) SolveBend(i, alphaBend);
                 }
                 PinEndpoints(trackVelocity: false);
             }
@@ -450,88 +427,21 @@ namespace onlyone
             ClampStretch();
             PinEndpoints(trackVelocity: false);
 
-            float bucketMassEff = dynamicBucket ? bucketMass : Mathf.Max(1e-9f, linearDensity * segLen);
-            Vector3 bucketCorrection  = pos[n - 1] - bucketPredicted;
-            Vector3 ropeForceOnBucket = bucketCorrection * (bucketMassEff / dt2);
-            bucketTension = ropeForceOnBucket.magnitude;
-
-            float area = Mathf.PI * ropeRadius * ropeRadius;
-            float maxStress = 0f;
-            int   worstIdx  = -1;
-
-            for (int i = 0; i < segments; i++)
+            // حساب التوتر - يدعم الوضع اليدوي
+            if (IsManualMode)
             {
-                if (IsBroken && i == BreakIndex) continue;
-
-                float tensionN;
-                if (i == segments - 1 && dynamicBucket)
-                    tensionN = bucketTension;
-                else
-                    tensionN = Mathf.Abs(lambda[i]) / (dt * dt);
-
-                float stressPa = tensionN / area;
-
-                if (allowPlasticFailure)
-                {
-                    float yieldStress = ultimateStress * yieldStressRatio;
-                    if (stressPa > yieldStress && stressPa < ultimateStress)
-                    {
-                        float excess = (stressPa - yieldStress) / Mathf.Max(1f, ultimateStress - yieldStress);
-                        plasticStretch[i] += excess * 0.0002f * dt;
-                    }
-                }
-
-                if (stressPa > maxStress) { maxStress = stressPa; worstIdx = i; }
+                int anchorSeg = Mathf.Max(0, handleFirstIdx - 1);
+                bucketTension = Mathf.Abs(lambda[anchorSeg]) / (dt * dt);
             }
-
-            CurrentTensionN     = maxStress * area;
-            CurrentStressPa     = maxStress;
-            CurrentSafetyFactor = (maxStress > 1f) ? (ultimateStress / maxStress) : float.PositiveInfinity;
-            EffectiveRopeLength = Vector3.Distance(pos[0], pos[n - 1]);
-
-            if (breakable && !IsBroken)
+            else
             {
-                float allowStress = ultimateStress / Mathf.Max(1f, safetyFactor);
-                bool  stressFail  = maxStress >= allowStress;
-
-                bool strainFail = false;
-                if (breakingStrain > 0f)
-                {
-                    for (int i = 0; i < segments; i++)
-                    {
-                        if (IsBroken && i == BreakIndex) continue;
-                        float dist   = Vector3.Distance(pos[i], pos[i + 1]);
-                        float strain = (dist - segLen) / segLen;
-                        if (strain >= breakingStrain) { strainFail = true; worstIdx = i; break; }
-                    }
-                }
-
-                if (stressFail || strainFail) Break(worstIdx);
+                float bucketMassEff = dynamicBucket ? bucketMass : Mathf.Max(1e-9f, linearDensity * segLen);
+                Vector3 bucketCorrection = pos[n - 1] - bucketPredicted;
+                Vector3 ropeForceOnBucket = bucketCorrection * (bucketMassEff / (dt * dt));
+                bucketTension = ropeForceOnBucket.magnitude;
             }
         }
-        private void Break(int atSegmentIndex)
-        {
-            if (IsBroken) return;
-            IsBroken   = true;
-            BreakIndex = atSegmentIndex;
-            if (dynamicBucket && pendulum) pendulum.externallyDriven = false;
 
-            int topCount    = atSegmentIndex + 1;
-            int bottomCount = n - topCount;
-
-            topPiecePos = new Vector3[topCount];
-
-            if (bottomCount >= 2)
-            {
-                bottomPiecePos = new Vector3[bottomCount];
-                var go = new GameObject("PbdRope_FallenPiece");
-                fallenLr = go.AddComponent<LineRenderer>();
-                fallenLr.sharedMaterial   = lr.sharedMaterial;
-                fallenLr.widthMultiplier  = ropeWidth;
-                fallenLr.widthCurve       = AnimationCurve.Constant(0f, 1f, 1f);
-                fallenLr.useWorldSpace    = true;
-            }
-        }
         private void SolveSegment(int idx, float alphaTilde, float betaTilde)
         {
             int a = idx, b = idx + 1;
@@ -543,8 +453,7 @@ namespace onlyone
             if (dist < 1e-7f) return;
 
             Vector3 nHat = d / dist;
-            float restLen = segLen + (allowPlasticFailure ? plasticStretch[idx] : 0f);
-            float c = dist - restLen;
+            float c = dist - segLen;
 
             float velTerm = 0f;
             if (betaTilde > 0f)
@@ -561,7 +470,6 @@ namespace onlyone
 
             pos[a] -= nHat * (invMass[a] * dL);
             pos[b] += nHat * (invMass[b] * dL);
-
         }
 
         private void SolveBend(int i, float alphaTilde)
@@ -635,45 +543,38 @@ namespace onlyone
 
             if (clampPivotTwist) twist[0] = 0f;
 
-            if(torsionalStiffness > 1e-9f)
+            float alphaTw = (torsionalStiffness > 1e-9f)
+                          ? (1f / torsionalStiffness) / (dt * dt) : 0f;
+            Array.Clear(lambdaTw, 0, lambdaTw.Length);
+
+            for (int k = 0; k < torsionIterations; k++)
             {
-                float alphaTw = (1f / torsionalStiffness) / (dt * dt);
-                Array.Clear(lambdaTw, 0, lambdaTw.Length);
+                bool fwd = (k & 1) == 0;
+                int start = fwd ? 0 : segments - 2;
+                int end   = fwd ? segments - 1 : -1;
+                int stepd = fwd ? 1 : -1;
 
-                for (int k = 0; k < torsionIterations; k++)
+                for (int j = start; j != end; j += stepd)
                 {
-                    bool fwd = (k & 1) == 0;
-                    int start = fwd ? 0 : segments - 2;
-                    int end   = fwd ? segments - 1 : -1;
-                    int stepd = fwd ? 1 : -1;
+                    int a = j, b = j + 1;
+                    float wSum = invInertia[a] + invInertia[b];
+                    if (wSum < 1e-12f) continue;
 
-                    for (int j = start; j != end; j += stepd)
-                    {
-                        if (IsBroken && j == BreakIndex) continue;
-                        int a = j, b = j + 1;
-                        float wSum = invInertia[a] + invInertia[b];
-                        if (wSum < 1e-12f) continue;
+                    float c = twist[b] - twist[a] + refTwist[b];
+                    float dL = (-c - alphaTw * lambdaTw[j]) / (wSum + alphaTw);
+                    lambdaTw[j] += dL;
 
-                        float c = twist[b] - twist[a] + refTwist[b];
-                        float dL = (-c - alphaTw * lambdaTw[j]) / (wSum + alphaTw);
-                        lambdaTw[j] += dL;
-
-                        twist[a] -= invInertia[a] * dL;
-                        twist[b] += invInertia[b] * dL;
-                    }
+                    twist[a] -= invInertia[a] * dL;
+                    twist[b] += invInertia[b] * dL;
                 }
             }
         }
 
         private void ClampStretch()
         {
+            float maxLen = segLen * stretchLimit;
             for (int i = 0; i < n - 1; i++)
             {
-                if (IsBroken && i == BreakIndex) continue;
-
-                float restLen = segLen + (allowPlasticFailure ? plasticStretch[i] : 0f);
-                float maxLen  = restLen * stretchLimit;
-
                 Vector3 d = pos[i + 1] - pos[i];
                 float dist = d.magnitude;
                 if (dist <= maxLen) continue;
@@ -689,6 +590,9 @@ namespace onlyone
             }
         }
 
+        // ================================================================
+        // الدالة PinEndpoints المعدلة - مع دعم الوضع اليدوي
+        // ================================================================
         private void PinEndpoints(bool trackVelocity)
         {
             if (trackVelocity)
@@ -697,8 +601,35 @@ namespace onlyone
                 if (!dynamicBucket) prev[n - 1] = pos[n - 1];
             }
             pos[0] = pivot.position;
+
             if (!dynamicBucket)
                 pos[n - 1] = bobOverride ? bobOverride.position : bob.position;
+
+            // ================================================================
+            // الوضع اليدوي - المقبض الصلب مع الحفاظ على السرعة
+            // ================================================================
+            if (IsManualMode)
+            {
+                for (int k = 0; k < handleSize; k++)
+                {
+                    int idx = handleFirstIdx + k;
+                    Vector3 p = manualTarget + handleOffset[k];
+
+                    // نطبق السرعة المحسوبة من حركة الهدف
+                    if (trackVelocity && hasPreviousTarget)
+                    {
+                        prev[idx] = p - manualVelocity * lastSubstep;
+                    }
+
+                    pos[idx] = p;
+
+                    // إذا لم تكن لدينا سرعة محسوبة بعد، نضع prev = pos
+                    if (!hasPreviousTarget)
+                    {
+                        prev[idx] = p;
+                    }
+                }
+            }
         }
 
         private void PublishState(float dt)
@@ -767,10 +698,16 @@ namespace onlyone
 
             elastic = eStretch + eBend + eTwist;
         }
+
         private void DriveBucket(float dt)
         {
             Vector3 bucketPosBefore = bucketBody ? bucketBody.position : (bobOverride ? bobOverride.position : bob.position);
             bool orientationValid = !(IsBroken && BreakIndex == segments - 1);
+            Vector3 targetPos = renderPos[n - 1];
+
+            Vector3 attach = bobOverride ? bobOverride.position : bob.position;
+            bob.position += targetPos - attach;
+
             if (orientationValid && bucketBody && n >= 2)
             {
                 Vector3 up = renderPos[n - 2] - renderPos[n - 1];
@@ -788,8 +725,6 @@ namespace onlyone
                     }
                 }
             }
-            Vector3 attach = bobOverride ? bobOverride.position : bob.position;
-            bob.position += renderPos[n - 1] - attach;
             // سرعة الدلو الخطية والزاوية العالمية، تُستخدم من نظام تصادم السائل لمعالجة الحركة السريعة (سويپت).
             if (dt > 1e-8f)
             {
@@ -805,6 +740,12 @@ namespace onlyone
                 }
                 prevBucketRotation = bucketBody ? bucketBody.rotation : prevBucketRotation;
             }
+
+            // تحديث bobOverride إذا كان موجوداً
+            if (bobOverride)
+            {
+                bobOverride.position = targetPos;
+            }
         }
 
         private void BuildRenderPositions(float alpha)
@@ -813,22 +754,7 @@ namespace onlyone
                 renderPos[i] = Vector3.Lerp(prev[i], pos[i], alpha);
         }
 
-        private void Render()
-        {
-            if (!IsBroken) { lr.SetPositions(renderPos); return; }
-
-            int topCount = BreakIndex + 1;
-            Array.Copy(renderPos, 0, topPiecePos, 0, topCount);
-            lr.positionCount = topCount;
-            lr.SetPositions(topPiecePos);
-
-            if (fallenLr && bottomPiecePos != null)
-            {
-                Array.Copy(renderPos, topCount, bottomPiecePos, 0, bottomPiecePos.Length);
-                fallenLr.positionCount = bottomPiecePos.Length;
-                fallenLr.SetPositions(bottomPiecePos);
-            }
-        }
+        private void Render() => lr.SetPositions(renderPos);
 
         private static Vector3 ParallelTransport(Vector3 v, Vector3 t0, Vector3 t1)
         {
@@ -849,6 +775,106 @@ namespace onlyone
             return Vector3.ProjectOnPlane(seed, t).normalized;
         }
 
+        // ================================================================
+        // MANUAL MANIPULATION MODE - الدوال العامة
+        // ================================================================
+
+        public void EnterManualMode()
+        {
+            if (!ready || IsManualMode) return;
+
+            if (!dynamicBucket)
+            {
+                Debug.LogWarning(
+                    $"[{nameof(PbdRope)}] Manual Manipulation Mode requires dynamicBucket = true " +
+                    "(the bucket must be the rope's own simulated endpoint, not an externally " +
+                    "driven transform).", this);
+                return;
+            }
+
+            handleSize = Mathf.Clamp(manualFrozenNodesCount, 1, Mathf.Max(1, n - 2));
+            handleFirstIdx = n - handleSize;
+
+            cachedHandleInvMass = new float[handleSize];
+            handleOffset = new Vector3[handleSize];
+
+            Vector3 bucketPos = pos[n - 1];
+            for (int k = 0; k < handleSize; k++)
+            {
+                int idx = handleFirstIdx + k;
+                cachedHandleInvMass[k] = invMass[idx];
+                invMass[idx] = 0f;
+                handleOffset[k] = pos[idx] - bucketPos;
+            }
+
+            // إعادة تعيين متغيرات السرعة
+            previousManualTarget = bucketPos;
+            manualVelocity = Vector3.zero;
+            hasPreviousTarget = false;
+
+            manualTarget = bucketPos;
+            IsManualMode = true;
+
+            if (pendulum) pendulum.SetManualFreeze(true);
+        }
+
+        public void ExitManualMode()
+        {
+            if (!IsManualMode) return;
+
+            for (int k = 0; k < handleSize; k++)
+            {
+                int idx = handleFirstIdx + k;
+                invMass[idx] = cachedHandleInvMass[k];
+                // نحافظ على السرعة - لا نضع prev = pos
+            }
+
+            IsManualMode = false;
+
+            if (dynamicBucket && pendulum)
+                PublishState(fixedStep);
+
+            if (pendulum) pendulum.SetManualFreeze(false);
+        }
+
+        public void SetManualBucketPosition(Vector3 desiredWorldPosition)
+        {
+            if (!ready || !IsManualMode) return;
+
+            Vector3 clamped = ClampToRopeConstraint(desiredWorldPosition);
+
+            // حساب السرعة من حركة الهدف
+            if (hasPreviousTarget)
+            {
+                manualVelocity = (clamped - previousManualTarget) / Time.deltaTime;
+                float maxSpeed = 20f;
+                if (manualVelocity.magnitude > maxSpeed)
+                    manualVelocity = manualVelocity.normalized * maxSpeed;
+            }
+            else
+            {
+                manualVelocity = Vector3.zero;
+                hasPreviousTarget = true;
+            }
+
+            previousManualTarget = clamped;
+            manualTarget = clamped;
+        }
+
+        public Vector3 ClampToRopeConstraint(Vector3 desiredWorldPosition)
+        {
+            Vector3 pivotPos = PivotPosition;
+            Vector3 offset = desiredWorldPosition - pivotPos;
+            float dist = offset.magnitude;
+
+            Vector3 dir = dist > 1e-6f ? offset / dist : Vector3.down;
+
+            float minD = Mathf.Min(minimumManualDistance, ropeLength);
+            float clampedDist = Mathf.Clamp(dist, minD, ropeLength);
+
+            return pivotPos + dir * clampedDist;
+        }
+
 #if UNITY_EDITOR
         private void OnDrawGizmosSelected()
         {
@@ -866,6 +892,21 @@ namespace onlyone
                     Vector3 mat = Quaternion.AngleAxis(twist[i] * Mathf.Rad2Deg, tangent[i]) * refDir[i];
                     Gizmos.DrawLine(mid, mid + mat * (ropeWidth * 3f));
                 }
+            }
+
+            if (pivot)
+            {
+                Gizmos.color = new Color(1f, 0.65f, 0f, 0.85f);
+                Gizmos.DrawWireSphere(pivot.position, ropeLength);
+                Gizmos.color = new Color(1f, 0.1f, 0.1f, 0.85f);
+                Gizmos.DrawWireSphere(pivot.position, minimumManualDistance);
+            }
+
+            if (Application.isPlaying && IsManualMode)
+            {
+                Gizmos.color = new Color(1f, 0f, 1f, 0.9f);
+                for (int k = 0; k < handleSize; k++)
+                    Gizmos.DrawWireSphere(pos[handleFirstIdx + k], ropeWidth * 1.8f);
             }
         }
 #endif

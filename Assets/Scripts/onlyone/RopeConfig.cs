@@ -8,8 +8,6 @@ namespace onlyone
     {
         [Header("Identity")]
         public string name = "Preset";
-        public string description = "";
-
         [Header("Shared")]
         public float gravity = 9.81f;
         public float fixedStep = 0.004f;
@@ -45,20 +43,19 @@ namespace onlyone
         public bool  enableTorsion = true;
         public float initialTurns = 8f;
         public float torsionalStiffness = 25f;
-        public float dampingRatio = 0.10f; 
+        public float dampingRatio = 0.10f;
         public int   torsionIterations = 8;
         public bool  clampPivotTwist = true;
         public float maxTwistRate = 600f;
-        
+
         public float stretchDampingRatio;
-        public string materialName = "Braided Nylon";
         public float  density = 1140f;
         public float  youngModulus = 3e8f;
         public float  poissonRatio = 0.4f;
         public bool   deriveFromMaterial = true;
 
         public bool   breakable = true;
-        public float  ropeRadius = 0.004f;   
+        public float  ropeRadius = 0.004f;
         public float  ultimateStress = 6e7f;
         public float  safetyFactor = 1.2f;
         public float  breakingStrain;

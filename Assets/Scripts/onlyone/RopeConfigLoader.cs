@@ -18,7 +18,7 @@ namespace onlyone
         [SerializeField] private int selected;
 
         private int applied = -1;
- 
+
         public string[] GetConfigNames()
         {
             if (configs == null || configs.Count == 0) return Array.Empty<string>();
@@ -27,13 +27,11 @@ namespace onlyone
             {
                 if (!configs[i]) { names[i] = $"{i}: (فارغ)"; continue; }
                 string label = configs[i].name;
-                
+
                 try
                 {
                     RopeConfig c = JsonUtility.FromJson<RopeConfig>(configs[i].text);
                     if (c != null && !string.IsNullOrEmpty(c.name)) label = c.name;
-                    // Debug.Log("name is : " + c.name);
-                    // Debug.Log($"<color=red>[TEST]</color> Loaded stretchDampingRatio from JSON: {c.stretchDampingRatio}");
                 }
                 catch { /* أبقِ اسم الملف */ }
                 names[i] = $"{i + 1}. {label}";
@@ -44,7 +42,7 @@ namespace onlyone
         public int Selected { get => selected; set => selected = value; }
 
         private void Start() => Apply(selected);
-        
+
         // ReSharper disable Unity.PerformanceAnalysis
         public void Apply(int index)
         {
@@ -64,7 +62,7 @@ namespace onlyone
             applied  = index;
             Debug.Log($"[ConfigLoader] طُبّقت التجربة {index + 1}/{configs.Count}: {c.name}");
         }
- 
+
         public void ApplySelectedIfChanged()
         {
             if (Application.isPlaying && selected != applied) Apply(selected);

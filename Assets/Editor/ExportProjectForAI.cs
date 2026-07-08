@@ -15,21 +15,17 @@ public class ExportProjectForAI
         {
             "Assets/ScriptableObjects",
             "Assets/Scripts/Bucket",
-            "Assets/Scripts/Canvas",
-            "Assets/Scripts/Studio",
-
-            "Assets/Scripts/Fluid Sim 3D",
-            
-            "Assets/Models",
-            "Assets/Prefabs",
-            "Assets/Resources",
-            "Assets/Shaders",
-            "Assets/Textures",
-            
-            // "Assets/Scripts/Fluid Sim 3D/compute",
+            "Assets/Scripts/onlyone",
 
             // "Assets/Scripts/Fluid Sim 3D/Data",
-            // "Assets/Scripts/Fluid Sim 3D/Systems",
+            // "Assets/Scripts/Fluid Sim 3D/compute",
+
+            "Assets/Scripts/Fluid Sim 3D/Data",
+            "Assets/Scripts/Fluid Sim 3D/Display",
+            "Assets/Scripts/Fluid Sim 3D/HLSL",
+            "Assets/Scripts/Fluid Sim 3D/physics",
+            "Assets/Scripts/Fluid Sim 3D/Systems",
+
             // "Assets/Scripts/Fluid Sim 3D/Utilities",
             
             // "Assets/Scenes",
@@ -39,9 +35,14 @@ public class ExportProjectForAI
         string[] files =
         {
             // "Assets/Scripts/Fluid Sim 3D/FluidManager3D.cs",
-            // "Assets/Scripts/Fluid Sim 3D/Display/ParticleCircle3D.shader",
             // "Assets/Scripts/Fluid Sim 3D/Config.cs",
-            "Assets/Editor/HoleDataDrawer.cs",
+            "Assets/Settings/PC_Renderer.asset",
+            "Assets/Scripts/Fluid Sim 3D/Utilities/FluidBoundary3D.cs",
+            "Assets/Scripts/Fluid Sim 3D/Utilities/ComputeHelper.cs",
+            "Assets/Scripts/Fluid Sim 3D/Utilities/ParticlesSpawner3D.cs",
+            "Assets/Scripts/Fluid Sim 3D/Config.cs",
+            "Assets/Scripts/Fluid Sim 3D/FluidManager3D.cs",
+            "Assets/Scripts/Fluid Sim 3D/FluidRendererSettings.cs",
         };
 
         StringBuilder builder = new StringBuilder();

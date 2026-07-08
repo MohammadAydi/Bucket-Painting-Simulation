@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 
 namespace onlyone
-{ 
+{
     [DisallowMultipleComponent]
     public class SphericalPendulum : MonoBehaviour
     {
@@ -41,21 +41,25 @@ namespace onlyone
 
         [Header("Integration (الوضع المستقل فقط)")]
         [SerializeField, Min(0.0001f)] private float fixedStep = 0.004f;
- 
+
         private double th, ph, thDot, phDot;
         private double accumulator;
         private RopeState state;
 
+        private bool manualFreeze;
+        public bool IsManualFrozen => manualFreeze;
+        public void SetManualFreeze(bool frozen) => manualFreeze = frozen;
+
         private const double MinSin = 1e-3;
         private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
- 
+
         public double Theta           => th;
         public double Phi             => ph;
         public double ThetaDot        => thDot;
         public double PhiDot          => phDot;
         public double EffectiveLength => state.effLength > 0 ? state.effLength : length;
         public float  Mass            => mass;
- 
+
         public double Tension         => state.tension;
         public double KineticEnergy   => state.kineticEnergy;
         public double PotentialEnergy => state.potentialEnergy;
@@ -106,20 +110,21 @@ namespace onlyone
             state = new RopeState(th, ph, thDot, phDot, length, 0, 0, 0, 0);
             accumulator = 0;
         }
- 
+
         public void PushState(in RopeState s)
         {
             state = s;
             th = s.theta; ph = s.phi; thDot = s.thetaDot; phDot = s.phiDot;
         }
- 
+
         public void SetStateFromWorld(double theta, double phi,
             double thetaDot, double phiDot, double effLen)
             => PushState(new RopeState(theta, phi, thetaDot, phiDot, effLen, 0, 0, 0, 0));
- 
+
         private void Update()
         {
             if (externallyDriven) return;   // الحبل يقود، لا تكامل هنا.
+            if (manualFreeze) return;       // Manual Manipulation Mode: freeze RK4 too.
 
             accumulator += Time.deltaTime;
             if (accumulator > 0.25) accumulator = 0.25;
@@ -201,7 +206,10 @@ namespace onlyone
         }
         private void OnGUI()
         {
-            GUILayout.BeginArea(new Rect(10, 10, 300, 180), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(10, 10, 300, 200), GUI.skin.box);
+
+            if (manualFreeze)
+                GUILayout.Label("<< MANUAL MANIPULATION MODE >>");
 
             GUILayout.Label($"Effective Length : {EffectiveLength:F4} m");
             GUILayout.Label($"Theta            : {Theta * Mathf.Rad2Deg:F2}°");
@@ -215,3 +223,5 @@ namespace onlyone
         }
     }
 }
+
+

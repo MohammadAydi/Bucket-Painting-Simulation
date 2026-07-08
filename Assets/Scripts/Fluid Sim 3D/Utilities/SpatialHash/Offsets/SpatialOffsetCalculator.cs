@@ -23,12 +23,12 @@ namespace Fluid_Sim_3D.Utilities.SpatialHash.Offsets
 			if (needsInit)
 			{
 				cs.SetBuffer(initKernel, Offsets, offsets);
-				global::J_Fluid_Sim_2D.Utilities.ComputeHelper.Dispatch(cs, sortedKeys.count, kernelIndex: initKernel);
+				ComputeHelper.Dispatch(cs, sortedKeys.count, kernelIndex: initKernel);
 			}
 
 			cs.SetBuffer(offsetsKernel, Offsets, offsets);
 			cs.SetBuffer(offsetsKernel, SortedKeys, sortedKeys);
-			global::J_Fluid_Sim_2D.Utilities.ComputeHelper.Dispatch(cs, sortedKeys.count, kernelIndex: offsetsKernel);
+			ComputeHelper.Dispatch(cs, sortedKeys.count, kernelIndex: offsetsKernel);
 		}
 	}
 }

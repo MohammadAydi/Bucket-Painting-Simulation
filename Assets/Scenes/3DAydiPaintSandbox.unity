@@ -152,8 +152,14 @@ MonoBehaviour:
   boundaryVolume: {fileID: 1562304914}
   settings: {fileID: 11400000, guid: e935e18c03d419345ab1e0a4542d807e, type: 2}
   fluidComputeShader: {fileID: 7200000, guid: 7433be18ba63a634abc5123f294dbfe7, type: 3}
-  oneSweepShader: {fileID: 7200000, guid: 7461e55737894fc4db68b4f3291b312d, type: 3}
   particleMaterial: {fileID: 2100000, guid: 844544271cbfcc8428cda7c6a1428bd6, type: 2}
+  bucket: {fileID: 0}
+  bucketCollision: {fileID: 0}
+  canvasSurface: {fileID: 0}
+  pigmentComputeShader: {fileID: 7200000, guid: 367f78b7ce40ef646a90bfb2a1eeb9b6, type: 3}
+  pigmentSettings: {fileID: 11400000, guid: 5e3338df351280a4b935661ee4959e0e, type: 2}
+  pigmentComputeShaderMixbox: {fileID: 7200000, guid: 6f1f1a310a3845898aedb95ff1ad3fe9, type: 3}
+  mixboxLUT: {fileID: 2800000, guid: 316a7c5858acd3248a844952c2e551e6, type: 3}
   normalTimeScale: 1
   slowTimeScale: 0.1
   maxTimestepFPS: 60
@@ -169,7 +175,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 0.72214, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -193,7 +199,7 @@ MonoBehaviour:
     maxScreenSpaceSize: 32
     strength: 0.45
     diffStrength: 3.7
-    iterations: 5
+    iterations: 3
   paintColor: {r: 2.1584904, g: 0.44783896, b: 0, a: 1}
   specularStrength: 0.8
   specularShininess: 64
@@ -588,7 +594,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 22, y: 11, z: 80}
+  m_LocalScale: {x: 22.54832, y: 11, z: 23.4696}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}

@@ -69,12 +69,6 @@ MonoBehaviour:
   m_Name: FluidRendererFeature
   m_EditorClassIdentifier: Assembly-CSharp::FluidRendererFeature
   m_Active: 1
-  particleDepthShader: {fileID: 4800000, guid: 7d70df080a5dbb54bbbddd994e991a52, type: 3}
-  packDepthShader: {fileID: 4800000, guid: c0fcbdc6b06c42bfa84826a1d217330e, type: 3}
-  bilateral1DShader: {fileID: 4800000, guid: d5b464669a232e041aa728e620810ae0, type: 3}
-  bilateral2DShader: {fileID: 4800000, guid: c5319a5f7c2f4bb4fb33ea83ae4415ea, type: 3}
-  normalsFromDepthShader: {fileID: 4800000, guid: 1988bdd80a53d2e4fb12f794fc1aba8d, type: 3}
-  fluidCompositeShader: {fileID: 4800000, guid: e81f46068f6d4a73aa53829d4f77bf16, type: 3}
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0

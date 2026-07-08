@@ -44,12 +44,12 @@ public class BucketGenerator : MonoBehaviour
 
     public void OnValidate()
     {
-        if (topRadius < 0.1f) topRadius = 0.1f;
-        if (bottomRadius < 0.1f) bottomRadius = 0.1f;
-        if (height < 0.1f) height = 0.1f;
-        if (thickness < 0.01f) thickness = 0.01f;
+        if (topRadius < 0.01f) topRadius = 0.01f;
+        if (bottomRadius < 0.01f) bottomRadius = 0.01f;
+        if (height < 0.01f) height = 0.01f;
+        if (thickness < 0.001f) thickness = 0.001f;
         if (thickness >= Mathf.Min(topRadius, bottomRadius)) thickness = Mathf.Min(topRadius, bottomRadius) - 0.05f;
-        if (dividerThickness < 0.01f) dividerThickness = 0.01f;
+        if (dividerThickness < 0.001f) dividerThickness = 0.001f;
         if (heightSubdivisions < 2) heightSubdivisions = 2;
         if (floorSubdivisions < 2) floorSubdivisions = 2;
 

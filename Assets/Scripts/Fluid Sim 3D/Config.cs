@@ -62,6 +62,26 @@ class Config
     public static readonly int SortTarget_PositionsId = Shader.PropertyToID("SortTarget_Positions");
     public static readonly int SortTarget_PredictedPositionsId = Shader.PropertyToID("SortTarget_PredictedPositions");
     public static readonly int SortTarget_VelocitiesId = Shader.PropertyToID("SortTarget_Velocities");
+    // ── Pigment ───────────────────────────────────────────────────────────────
+    public static readonly int PigmentsId             = Shader.PropertyToID("_Pigments");
+    public static readonly int PigmentsWriteId        = Shader.PropertyToID("_PigmentsWrite");
+    public static readonly int SortTarget_PigmentsId  = Shader.PropertyToID("SortTarget_Pigments");
+    public static readonly int DiffusionCoeffId       = Shader.PropertyToID("_DiffusionCoeff");
+    // Shader-side: pigment buffer for rendering (set on the particle depth shader)
+    public static readonly int PigmentBufferShaderId  = Shader.PropertyToID("_Pigments");
+
+    public static readonly int DebugId = Shader.PropertyToID("_debugBuffer");
+
+    //canvas:
+    public static readonly int CanvasCenterId = Shader.PropertyToID("_CanvasCenter");
+    public static readonly int CanvasNormalId = Shader.PropertyToID("_CanvasNormal");
+    public static readonly int CanvasTangentId = Shader.PropertyToID("_CanvasTangent");
+    public static readonly int CanvasBitangentId = Shader.PropertyToID("_CanvasBitangent");
+    public static readonly int CanvasHalfExtentsId = Shader.PropertyToID("_CanvasHalfExtents");
+    public static readonly int CanvasFrictionCoeffId = Shader.PropertyToID("_CanvasFrictionCoeff");
+    public static readonly int CanvasCollisionDampingId = Shader.PropertyToID("_CanvasCollisionDamping");
+    public static readonly int CanvasWorldToLocalId = Shader.PropertyToID("_CanvasWorldToLocal");
+    public static readonly int CanvasLocalToWorldId = Shader.PropertyToID("_CanvasLocalToWorld");
 
 }
 

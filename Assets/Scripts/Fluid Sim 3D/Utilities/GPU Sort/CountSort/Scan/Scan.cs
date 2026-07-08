@@ -31,7 +31,7 @@ namespace Fluid_Sim_3D.Utilities.GPU_Sort.CountSort.Scan
 
             if (!freeBuffers.TryGetValue(numGroups, out ComputeBuffer groupSumBuffer))
             {
-                groupSumBuffer = global::J_Fluid_Sim_2D.Utilities.ComputeHelper.CreateStructuredBuffer<uint>(numGroups);
+                groupSumBuffer = ComputeHelper.CreateStructuredBuffer<uint>(numGroups);
                 freeBuffers.Add(numGroups, groupSumBuffer);
             }
 
@@ -61,7 +61,7 @@ namespace Fluid_Sim_3D.Utilities.GPU_Sort.CountSort.Scan
         {
             foreach (var b in freeBuffers)
             {
-                global::J_Fluid_Sim_2D.Utilities.ComputeHelper.Release(b.Value);
+                ComputeHelper.Release(b.Value);
             }
         }
 

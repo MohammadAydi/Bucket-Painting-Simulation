@@ -1,0 +1,22 @@
+{
+    "name": "Test 2",
+    "gravity": 981.0, "fixedStep": 0.004,
+    "bucketMass": 3.0, "bucketRadius": 13.0,
+    "airDensity": 0.000001225, "bucketDragCoefficient": 1.0,
+    "length": 120.0, "startTheta": 30.0, "startPhi": 0.0,
+    "startThetaDot": 0.0, "startPhiDot": 0.0, "pivotFriction": 0.02,
+    "segments": 26, "ropeLength": 122.0, "ropeWidth": 1.0,
+    "linearDensity": 0.000895,
+    "substeps": 6, "constraintIterations": 10,
+    "compliance": 0.000002987,
+    "internalDampingRate": 0.04,
+    "stretchDampingRatio": 0.015,
+    "stretchLimit": 1.08,
+    "enableBending": true, "bendingStiffness": 419.0,
+    "wind": {"x":0,"y":0,"z":0}, "dynamicBucket": true,
+    "enableTorsion": true, "initialTurns": 0.0,
+    "torsionalStiffness": 7530.0, "dampingRatio": 0.08,
+    "ropeRadius": 0.5, "torsionIterations": 10,
+    "clampPivotTwist": true, "maxTwistRate": 300.0,
+    "deriveFromMaterial": false
+}

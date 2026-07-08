@@ -8,7 +8,9 @@
 #pragma kernel NearPressureSolver
 #pragma kernel StandardViscositySolver 
 #pragma kernel StandardSurfaceTension 
-#pragma kernel Integrator 
+#pragma kernel Integrator
+#pragma kernel CanvasCollision
+#pragma kernel FrictionForce
 
 #include "UnityCG.cginc" 
 #include "FluidMath.hlsl" 
@@ -30,6 +32,8 @@ RWStructuredBuffer<uint> SpatialOffsets;
 RWStructuredBuffer<float3> SortTarget_Positions; 
 RWStructuredBuffer<float3> SortTarget_PredictedPositions; 
 RWStructuredBuffer<float3> SortTarget_Velocities; 
+
+RWStructuredBuffer<float> _debugBuffer;
 
 uint _ParticleCount; 
 float _DeltaTime; 
@@ -55,6 +59,24 @@ float _ViscosityCoeff;
 float _SurfaceTensionCoeff; 
 float _SurfaceTensionThreshold; 
 
+// ===== Canvas plane uniforms =====
+// The canvas is a finite, arbitrarily transformed plane (a stretched quad).
+// We describe it with a center point, a unit normal, and two unit in-plane
+// axes (tangent/bitangent) plus half-extents along those axes.
+float3 _CanvasCenter;
+float3 _CanvasNormal;     // unit, points away from the "front" paintable face
+float3 _CanvasTangent;    // unit, in-plane axis (local X)
+float3 _CanvasBitangent;  // unit, in-plane axis (local Y), = cross(normal, tangent)
+float2 _CanvasHalfExtents; // half-width along tangent, half-height along bitangent
+
+float _CanvasFrictionCoeff;   // delta in formula (8), controls falloff distance
+float _CanvasCollisionDamping;
+
+float4x4 _CanvasWorldToLocal;
+float4x4 _CanvasLocalToWorld;
+
+
+
 static const int3 CellOffsets[27] =
 {
     int3(-1, -1, -1), int3(0, -1, -1), int3(1, -1, -1),
@@ -79,6 +101,9 @@ static const int3 CellOffsets[27] =
 #include "../Physics/Viscosity/ViscositySolver.hlsl"
 #include "../Physics/SurfaceTension/SurfaceTensionSolver.hlsl"
 #include "../Physics/Integrator//Integrate.hlsl"
+#include "../Physics/Canvas/CanvasMath.hlsl"
+#include "../Physics/Canvas/CanvasCollision.hlsl"
+#include "../Physics/Canvas/FrictionSolver.hlsl"
 
 // ─────────────────────────────────────────────────────────────
 // Kernel Definitions
@@ -112,6 +137,11 @@ void StandardViscositySolver(uint3 id : SV_DispatchThreadID) { ApplyViscosity(id
 
 [numthreads(NumThreads, 1, 1)]
 void StandardSurfaceTension(uint3 id : SV_DispatchThreadID) { ApplySurfaceTension(id); }
+
+[numthreads(NumThreads, 1, 1)]
+void CanvasCollision(uint3 id : SV_DispatchThreadID) { ResolveCanvasCollision(id); }
+[numthreads(NumThreads, 1, 1)]
+void FrictionForce(uint3 id : SV_DispatchThreadID) { ApplyCanvasFriction(id); }
 
 [numthreads(NumThreads, 1, 1)]
 void Integrator(uint3 id : SV_DispatchThreadID) { ApplyIntegration(id); }

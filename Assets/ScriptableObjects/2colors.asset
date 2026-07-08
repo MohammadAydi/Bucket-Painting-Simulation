@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cb1bc980621e76449f455478cf6cd8a, type: 3}
   m_Name: 2colors
   m_EditorClassIdentifier: Assembly-CSharp::PigmentSettings
-  mixingModel: 2
-  diffusionCoeff: 1.96
+  mixingModel: 1
+  diffusionCoeff: 1.23
   spawnColors:
   - {r: 1, g: 0.07844187, b: 0, a: 1}
   - {r: 0, g: 0, b: 1, a: 1}

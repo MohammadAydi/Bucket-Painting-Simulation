@@ -7,8 +7,6 @@ using UnityEngine;
 
 public static class FluidMeshUtils
 {
-    /// Creates a unit quad mesh (same layout as Sebastian's QuadGenerator).
-    /// Vertices go -0.5..+0.5 in XY, UV 0..1.
     public static Mesh CreateQuad()
     {
         var m = new Mesh { name = "FluidQuad" };

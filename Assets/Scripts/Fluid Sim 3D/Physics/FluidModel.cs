@@ -57,7 +57,6 @@ class FluidModel : IDisposable
         ComputeShader sphCompute,
         ComputeShader pigmentCompute = null,
         PigmentSettings pigmentSettings = null,
-        ComputeShader pigmentComputeMixbox = null,
         Texture2D mixboxLUT = null
     )
     {
@@ -67,10 +66,13 @@ class FluidModel : IDisposable
         // expose the same three kernel names (PigmentReorderKernel,
         // PigmentReorderCopyBack, PigmentDiffusionKernel), so nothing else
         // needs to change based on which one is selected.
+        _pigmentCompute = pigmentCompute;
         bool useMixbox = pigmentSettings != null
-                       && pigmentSettings.mixingModel == PigmentSettings.PigmentMixingModel.Mixbox;
-        _pigmentCompute = useMixbox ? pigmentComputeMixbox : pigmentCompute;
-        _mixboxLUT      = useMixbox ? mixboxLUT : null;
+                         && pigmentSettings.mixingModel == PigmentSettings.PigmentMixingModel.Mixbox;
+        _mixboxLUT = useMixbox ? mixboxLUT : null;
+        string diffusionKernel = useMixbox
+            ? "PigmentDiffusionKernelMixBox"
+            : "PigmentDiffusionKernelAdditive";
         DisposeBuffers();
         ParticleCount = spawnData.positions.Length;
         if (ParticleCount <= 1)
@@ -110,9 +112,9 @@ class FluidModel : IDisposable
         if (_pigmentCompute != null)
         {
             _pigmentReorder   = new PigmentReorder(this, _pigmentCompute,
-                                    "PigmentReorderKernel", "PigmentReorderCopyBack");
+                "PigmentReorderKernel", "PigmentReorderCopyBack");
             _pigmentDiffusion = new PigmentDiffusion(this, _pigmentCompute,
-                                    "PigmentDiffusionKernel", _mixboxLUT);
+                diffusionKernel, _mixboxLUT);
             _pigmentReorder.BindsBuffers();
             _pigmentDiffusion.BindsBuffers();
         }

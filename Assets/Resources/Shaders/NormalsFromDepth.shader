@@ -1,4 +1,4 @@
-// Shaders/NormalsFromDepth_URP.shader
+// Shaders/NormalsFromDepth.shader
 // ──────────────────────────────────────────────────────────────────────────────
 // Reconstructs world-space normals from the bilaterally-smoothed depth.
 // Direct URP port of Sebastian's NormalsFromDepth.shader.
@@ -9,7 +9,7 @@
 // The min-Z-gradient trick (take the shorter of forward/backward derivative)
 // preserves sharp silhouette normals at depth discontinuities.
 // ──────────────────────────────────────────────────────────────────────────────
-Shader "Fluid/NormalsFromDepth_URP"
+Shader "Fluid/NormalsFromDepth"
 {
     SubShader
     {

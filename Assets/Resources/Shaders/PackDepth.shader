@@ -1,4 +1,4 @@
-Shader "Fluid/PackDepth_URP"
+Shader "Fluid/PackDepth"
 {
     SubShader
     {

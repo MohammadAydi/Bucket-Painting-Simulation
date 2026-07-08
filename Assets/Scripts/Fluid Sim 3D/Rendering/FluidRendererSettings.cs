@@ -7,6 +7,11 @@ using UnityEngine;
 
 public class FluidRendererSettings : MonoBehaviour
 {
+    [Header("Render Mode")]
+    [Tooltip("FluidSurface = full screen-space pipeline.\n" +
+             "VelocityDebug = particle billboards coloured by speed (replaces the old RenderSystem3D).")]
+    public FluidRendererFeature.RenderMode renderMode = FluidRendererFeature.RenderMode.FluidSurface;
+
     [Header("Particle Depth")]
     public float depthParticleSize = 0.15f;
 
@@ -25,7 +30,6 @@ public class FluidRendererSettings : MonoBehaviour
 
     [Header("Paint / Composite")]
     [ColorUsage(false, true)]
-    public Color paintColor         = new Color(0.2f, 0.5f, 1f);
     public float specularStrength   = 0.8f;
     public float specularShininess  = 64f;
     [Range(0f, 1f)]

@@ -17,18 +17,9 @@ public sealed class SpawnSystem3D
     // the active PigmentMixingModel diffuses in:
     //   LinearRGB / Mixbox : stored as plain linear RGB (Mixbox's own kernel
     //                        converts to/from its latent space internally).
-    //   RYB                : stored as (r, y, b) pigment-amount coordinates —
-    //                        see RYBColorMixing.cs / ColorMixing.hlsl.
     static Vector4 EncodePigment(Color spawnColor, PigmentSettings pigmentSettings)
     {
         Color linear = spawnColor.linear;
-
-        if (pigmentSettings.mixingModel == PigmentSettings.PigmentMixingModel.RYB)
-        {
-            Vector3 ryb = RYBColorMixing.RGBtoRYB(linear);
-            return new Vector4(ryb.x, ryb.y, ryb.z, linear.a);
-        }
-
         return new Vector4(linear.r, linear.g, linear.b, linear.a);
     }
 
@@ -155,7 +146,7 @@ public sealed class SpawnSystem3D
 
         float innerRadius = bucket.bottomRadius - bucket.thickness - _settings.radius;
         float minHeight   = bucket.thickness + _settings.radius;
-        float maxHeight   = bucket.height - bucket.thickness - _settings.radius;
+        float maxHeight   = bucket.height + 0.05f;
         Matrix4x4 l2w     = bucket.transform.localToWorldMatrix;
 
         for (int i = 0; i < n; i++)

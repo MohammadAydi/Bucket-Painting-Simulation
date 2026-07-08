@@ -5,7 +5,7 @@ using UnityEngine.Rendering.RenderGraphModule;
 
 public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
 {
-    static readonly int s_PaintColor        = Shader.PropertyToID("_PaintColor");
+    //static readonly int s_PaintColor        = Shader.PropertyToID("_PaintColor");
     static readonly int s_SpecularStrength  = Shader.PropertyToID("_SpecularStrength");
     static readonly int s_Shininess         = Shader.PropertyToID("_Shininess");
     static readonly int s_ReflectStrength   = Shader.PropertyToID("_ReflectStrength");
@@ -41,7 +41,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
 
         FluidRTPool.EnsureCompositeOutRT(ref s_OutRT, w, h);
 
-        _mat.SetColor(s_PaintColor,        _feature.paintColor);
+       // _mat.SetColor(s_PaintColor,        _feature.paintColor);
         _mat.SetFloat(s_SpecularStrength,  _feature.specularStrength);
         _mat.SetFloat(s_Shininess,         _feature.specularShininess);
         _mat.SetFloat(s_ReflectStrength,   _feature.reflectionStrength);

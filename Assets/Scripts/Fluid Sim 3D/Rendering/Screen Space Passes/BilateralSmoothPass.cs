@@ -202,6 +202,6 @@ public class BilateralSmoothPass : ScriptableRenderPass, System.IDisposable
     {
         public Material      material;
         public int           passIndex;
-        public TextureHandle srcTex;   // TextureHandle, not RTHandle — works with RasterCommandBuffer
+        public TextureHandle srcTex; 
     }
 }

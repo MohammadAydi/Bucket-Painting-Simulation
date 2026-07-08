@@ -1,4 +1,4 @@
-// Shaders/ParticleDepth3D_URP.shader
+// Shaders/ParticleDepth3D.shader
 // ──────────────────────────────────────────────────────────────────────────────
 // Renders one billboard quad per particle.
 // Reads position from the ParticleData3D ComputeBuffer (set via C#).
@@ -13,7 +13,7 @@
 // my ParticleDepth3D.shader — logic is identical, only the include changed
 // (UnityCG.cginc → Core.hlsl).
 // ──────────────────────────────────────────────────────────────────────────────
-Shader "Fluid/ParticleDepth3D_URP"
+Shader "Fluid/ParticleDepth3D"
 {
     SubShader
     {
@@ -45,18 +45,16 @@ Shader "Fluid/ParticleDepth3D_URP"
             StructuredBuffer<float3> Positions; // set via SetBuffer("Positions", PositionsBuffer)
             // Pigment buffer — float4 per particle. Meaning depends on _PigmentMixingMode:
             //   0 = LinearRGB : already displayable linear RGB
-            //   1 = RYB       : (r, y, b) pigment-amount coords — needs RYBtoRGB() below
-            //   2 = Mixbox    : already displayable linear RGB (the Mixbox diffusion
+            //   1 = Mixbox    : already displayable linear RGB (the Mixbox diffusion
             //                   kernel converts to/from latent space on the GPU each step)
+            // Both modes store displayable RGB directly, so no per-mode decode is
+            // needed here anymore (RYB — the one mode that stored non-RGB pigment-
+            // amount coordinates — has been removed).
             // Declared as a raw buffer so the shader compiles even when the C#
             // side has not yet set it (e.g. when no PigmentSettings is assigned).
             // The shader falls back to opaque white in that case.
             StructuredBuffer<float4> _Pigments;
             float scale;
-            int _PigmentMixingMode;
-
-            // From-scratch RYB<->RGB pigment mixing (no external library).
-            #include "../Physics/Pigment/ColorMixing.hlsl"
 
             // ── Vertex/fragment structs ────────────────────────────────────────
             struct Attributes
@@ -137,12 +135,10 @@ Shader "Fluid/ParticleDepth3D_URP"
 
                 FragOutput o;
                 o.depth   = float4(eyeDepth, 0, 0, eyeDepth);
-                // Decode pigment based on the active mixing model. RYB is the
-                // only mode whose buffer contents differ from displayable RGB.
-                float3 displayRGB = (_PigmentMixingMode == 1)
-                    ? RYBtoRGB(IN.pigment.rgb)
-                    : IN.pigment.rgb;
-                o.pigment = float4(displayRGB, IN.pigment.a);
+                // Both remaining mixing models (LinearRGB, Mixbox) store the
+                // buffer as already-displayable RGB, so no per-mode decode
+                // is needed here — RYB was the only mode that required one.
+                o.pigment = float4(IN.pigment.rgb, IN.pigment.a);
                 return o;
             }
             ENDHLSL

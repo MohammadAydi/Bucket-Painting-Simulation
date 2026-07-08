@@ -1,4 +1,4 @@
-Shader "Fluid/FluidComposite_URP"
+Shader "Fluid/FluidComposite"
 {
     SubShader
     {
@@ -32,7 +32,7 @@ Shader "Fluid/FluidComposite_URP"
             TEXTURE2D(_PigmentColorTex);
             SAMPLER(sampler_PigmentColorTex);
 
-            float4 _PaintColor;
+            
             float _SpecularStrength;
             float _Shininess;
             float _ReflectStrength;
@@ -73,9 +73,7 @@ Shader "Fluid/FluidComposite_URP"
                 // fall back to the global _PaintColor when alpha is 0 (no pigment
                 // buffer assigned or particle system disabled).
                 float4 pigmentSample = SAMPLE_TEXTURE2D(_PigmentColorTex, sampler_PigmentColorTex, uv);
-                float3 paintCol = (pigmentSample.a > 0.01)
-                    ? pigmentSample.rgb
-                    : _PaintColor.rgb;
+                float3 paintCol = pigmentSample.rgb;
                 float3 lightCol = mainLight.color;
 
                 // ── Ambient ───────────────────────────────────────────────────

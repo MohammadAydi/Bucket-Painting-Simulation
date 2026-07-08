@@ -163,35 +163,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0bea8509804dfa14e909d680465c8d67, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MooringLinePBD_Spherical
-  numSegments: 20
-  fallbackRopeLength: 5
-  nodeMass: 0.05
-  ballMass: 2
-  subSteps: 8
-  distanceIterations: 4
-  stretchStiffness: 1
-  compressionStiffness: 0
-  enableBending: 1
-  bendingIterations: 2
-  bendingStiffness: 0.02
-  enableLRA: 0
-  lraIterations: 1
-  ropeDamping: 0.02
-  pivot: {fileID: 1292625003}
-  ball: {fileID: 1150877040}
-  useSphericalInit: 1
-  startTheta: 30
-  startPhi: 0
-  startThetaDot: 0
-  startPhiDot: 120
-  gravity: 9.81
-  airDensity: 1.225
-  dragCoefficient: 1
-  bucketRadius: 0.12
-  pivotFriction: 0.02
-  ropeSegments: []
-  lineRenderer: {fileID: 0}
-  lineWidth: 0.03
 --- !u!1 &692249369
 GameObject:
   m_ObjectHideFlags: 0
@@ -548,7 +519,7 @@ Transform:
   m_GameObject: {fileID: 1150877036}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: -1.23, y: 4.19, z: 1.94}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

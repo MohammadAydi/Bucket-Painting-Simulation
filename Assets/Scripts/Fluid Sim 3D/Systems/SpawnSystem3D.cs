@@ -139,7 +139,7 @@ public sealed class SpawnSystem3D
 
         float innerRadius = bucket.bottomRadius - bucket.thickness - _settings.radius;
         float minHeight   = bucket.thickness + _settings.radius;
-        float maxHeight   = bucket.height + 0.05f;
+        float maxHeight   = bucket.height - bucket.thickness - _settings.radius;
         Matrix4x4 l2w     = bucket.transform.localToWorldMatrix;
 
         for (int i = 0; i < n; i++)

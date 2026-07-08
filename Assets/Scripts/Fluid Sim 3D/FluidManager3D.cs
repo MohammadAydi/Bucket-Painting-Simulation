@@ -16,6 +16,12 @@ public class FluidManager3D : MonoBehaviour
     [SerializeField] ComputeShader pigmentComputeShader;
     [Tooltip("Assign a PigmentSettings asset to control diffusion and spawn colors.")]
     [SerializeField] PigmentSettings pigmentSettings;
+    [Tooltip("OPTIONAL. Only used when PigmentSettings.mixingModel = Mixbox. " +
+             "Assign PigmentDiffusionMixbox.compute (requires the Mixbox package).")]
+    [SerializeField] ComputeShader pigmentComputeShaderMixbox;
+    [Tooltip("OPTIONAL. Only used when PigmentSettings.mixingModel = Mixbox. " +
+             "Assign Packages/com.scrtwpns.mixbox/Textures/MixboxLUT.png.")]
+    [SerializeField] Texture2D mixboxLUT;
 
     FluidModel _fluidModel;
 
@@ -55,6 +61,7 @@ public class FluidManager3D : MonoBehaviour
     public ComputeBuffer VelocitiesBuffer => _fluidModel?.VelocitiesBuffer;
     public int ParticleCount => _fluidModel?.ParticleCount ?? 0;
     public ComputeBuffer PigmentBuffer    => _fluidModel?.PigmentBuffer;
+    public PigmentSettings PigmentSettings => pigmentSettings;
 
     void Awake()
     {
@@ -66,6 +73,8 @@ public class FluidManager3D : MonoBehaviour
     {
         if (settings != null)
             settings.OnChanged += OnSettingsChanged;
+        if (pigmentSettings != null)
+            pigmentSettings.OnChanged += OnPigmentSettingsChanged;
 
         InitializeSystems();
     }
@@ -76,6 +85,11 @@ public class FluidManager3D : MonoBehaviour
         {
             settings.OnChanged -= OnSettingsChanged;
             settings.OnChanged += OnSettingsChanged;
+        }
+        if (pigmentSettings != null)
+        {
+            pigmentSettings.OnChanged -= OnPigmentSettingsChanged;
+            pigmentSettings.OnChanged += OnPigmentSettingsChanged;
         }
 
         InitializeSystems();
@@ -124,7 +138,18 @@ public class FluidManager3D : MonoBehaviour
     void OnDestroy()
     {
         if (settings != null) settings.OnChanged -= OnSettingsChanged;
+        if (pigmentSettings != null) pigmentSettings.OnChanged -= OnPigmentSettingsChanged;
         DisposeSystems();
+    }
+
+    // Changing mixingModel (or spawnColors, diffusionCoeff being a spawn input)
+    // needs a full respawn: colors are encoded per-mode at spawn time, and
+    // Mixbox mode uses a different compute shader entirely. Simplest correct
+    // behavior is to just reinitialize, same as a particle-count change.
+    void OnPigmentSettingsChanged()
+    {
+        if (!_initialized) return;
+        // InitializeSystems();
     }
 
     void InitializeSystems()
@@ -143,7 +168,8 @@ public class FluidManager3D : MonoBehaviour
             ? _spawnSystem.SpawnParticlesInBucket(bucket, pigmentSettings)
             : _spawnSystem.SpawnParticles(boundaryVolume, pigmentSettings);
         _fluidModel = new FluidModel(spawnData, settings, fluidComputeShader,
-                                     pigmentComputeShader, pigmentSettings);
+                                     pigmentComputeShader, pigmentSettings,
+                                     pigmentComputeShaderMixbox, mixboxLUT);
         _fluidModel.SetSmoothingConstant(settings.smoothingRadius);
         if (particleMaterial == null)
             particleMaterial = new Material(Shader.Find("Fluid/ParticleCircle3D"));

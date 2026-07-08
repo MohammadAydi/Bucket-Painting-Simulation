@@ -11,9 +11,12 @@ using static Fluid_Sim_3D.Utilities.ComputeHelper;
 // ─────────────────────────────────────────────────────────────────────────────
 class PigmentDiffusion : GPUExecuter
 {
-    public PigmentDiffusion(FluidModel model, ComputeShader compute, string kernelName)
+    readonly Texture2D _mixboxLUT;
+
+    public PigmentDiffusion(FluidModel model, ComputeShader compute, string kernelName, Texture2D mixboxLUT = null)
         : base(model, compute, kernelName)
     {
+        _mixboxLUT = mixboxLUT;
     }
 
     public override void BindsBuffers()
@@ -27,5 +30,9 @@ class PigmentDiffusion : GPUExecuter
             _model.PigmentBuffer,               // read current pigment values
             _model.PigmentBufferWrite,          // write diffused pigment values (double-buffer)
         });
+
+        // Only present when running PigmentDiffusionMixbox.compute in Mixbox mode.
+        if (_mixboxLUT != null)
+            _compute.SetTexture(_kernel, "_MixboxLUT", _mixboxLUT);
     }
 }

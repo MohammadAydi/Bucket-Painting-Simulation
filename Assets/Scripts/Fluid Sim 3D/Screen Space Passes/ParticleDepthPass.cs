@@ -27,6 +27,7 @@ public class ParticleDepthPass : ScriptableRenderPass, System.IDisposable
     static readonly int s_Positions = Shader.PropertyToID("Positions");
     static readonly int s_Scale     = Shader.PropertyToID("scale");
     static readonly int s_Pigments  = Shader.PropertyToID("_Pigments");
+    static readonly int s_MixMode   = Shader.PropertyToID("_PigmentMixingMode");
 
     // ── RT handles (shared with other passes via FluidRTPool) ────────────────
     internal static RTHandle s_DepthRT;        // R32_SFloat color — the depth VALUE
@@ -84,6 +85,10 @@ public class ParticleDepthPass : ScriptableRenderPass, System.IDisposable
         // Bind pigment buffer when available (null-safe: shader uses white fallback)
         if (fm.PigmentBuffer != null)
             _mat.SetBuffer(s_Pigments, fm.PigmentBuffer);
+
+        // Tell the shader how to decode the pigment buffer (LinearRGB=0, RYB=1, Mixbox=2).
+        int mixMode = fm.PigmentSettings != null ? (int)fm.PigmentSettings.mixingModel : 0;
+        _mat.SetInt(s_MixMode, mixMode);
 
         // Ensure args buffer
         EnsureArgsBuffer(fm.ParticleCount);

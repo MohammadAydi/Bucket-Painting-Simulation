@@ -43,12 +43,20 @@ Shader "Fluid/ParticleDepth3D_URP"
 
             // ── Particle data buffers ──────────────────────────────────────────
             StructuredBuffer<float3> Positions; // set via SetBuffer("Positions", PositionsBuffer)
-            // Pigment buffer — float4 linear RGBA per particle.
+            // Pigment buffer — float4 per particle. Meaning depends on _PigmentMixingMode:
+            //   0 = LinearRGB : already displayable linear RGB
+            //   1 = RYB       : (r, y, b) pigment-amount coords — needs RYBtoRGB() below
+            //   2 = Mixbox    : already displayable linear RGB (the Mixbox diffusion
+            //                   kernel converts to/from latent space on the GPU each step)
             // Declared as a raw buffer so the shader compiles even when the C#
             // side has not yet set it (e.g. when no PigmentSettings is assigned).
             // The shader falls back to opaque white in that case.
             StructuredBuffer<float4> _Pigments;
             float scale;
+            int _PigmentMixingMode;
+
+            // From-scratch RYB<->RGB pigment mixing (no external library).
+            #include "../Physics/Pigment/ColorMixing.hlsl"
 
             // ── Vertex/fragment structs ────────────────────────────────────────
             struct Attributes
@@ -129,8 +137,12 @@ Shader "Fluid/ParticleDepth3D_URP"
 
                 FragOutput o;
                 o.depth   = float4(eyeDepth, 0, 0, eyeDepth);
-                // Write particle pigment color (already linear RGBA from buffer)
-                o.pigment = IN.pigment;
+                // Decode pigment based on the active mixing model. RYB is the
+                // only mode whose buffer contents differ from displayable RGB.
+                float3 displayRGB = (_PigmentMixingMode == 1)
+                    ? RYBtoRGB(IN.pigment.rgb)
+                    : IN.pigment.rgb;
+                o.pigment = float4(displayRGB, IN.pigment.a);
                 return o;
             }
             ENDHLSL

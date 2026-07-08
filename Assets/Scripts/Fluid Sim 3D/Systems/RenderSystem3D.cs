@@ -1,7 +1,8 @@
 using System;
 using UnityEngine;
 using UnityEngine.Rendering;
-
+// THIS FILE IS ONLY FOR RENDERING PARTICLES SPEED AND DEBUGING SPH BEHAVIOUR, MAIN 
+// RENDERING PIPELINE IS USING FEATURE RENDERER AND SCREEN SPACE PASSES FILES
 public sealed class RenderSystem3D : IDisposable
 {
     static readonly int PositionId    = Shader.PropertyToID("_Position");

@@ -13,6 +13,25 @@ public sealed class SpawnSystem3D
         _particlesSpawner = new ParticlesSpawner3D(settings);
     }
 
+    // Encodes an author-facing sRGB spawn color into whatever representation
+    // the active PigmentMixingModel diffuses in:
+    //   LinearRGB / Mixbox : stored as plain linear RGB (Mixbox's own kernel
+    //                        converts to/from its latent space internally).
+    //   RYB                : stored as (r, y, b) pigment-amount coordinates —
+    //                        see RYBColorMixing.cs / ColorMixing.hlsl.
+    static Vector4 EncodePigment(Color spawnColor, PigmentSettings pigmentSettings)
+    {
+        Color linear = spawnColor.linear;
+
+        if (pigmentSettings.mixingModel == PigmentSettings.PigmentMixingModel.RYB)
+        {
+            Vector3 ryb = RYBColorMixing.RGBtoRYB(linear);
+            return new Vector4(ryb.x, ryb.y, ryb.z, linear.a);
+        }
+
+        return new Vector4(linear.r, linear.g, linear.b, linear.a);
+    }
+
     public SpawnData3D SpawnParticles(FluidBoundary3D boundary, PigmentSettings pigmentSettings = null)
     {
         int n      = _settings.particleCount;
@@ -70,8 +89,7 @@ public sealed class SpawnSystem3D
                 float midLocal = (leftXMax + rightXMin) * 0.5f;
                 int   g        = x < midLocal ? 0 : 1;
 
-                Color linear = pigmentSettings.spawnColors[g].linear;
-                spawnData.pigmentColors[i] = new Vector4(linear.r, linear.g, linear.b, linear.a);
+                spawnData.pigmentColors[i] = EncodePigment(pigmentSettings.spawnColors[g], pigmentSettings);
             }
 
             return spawnData;
@@ -91,8 +109,7 @@ public sealed class SpawnSystem3D
 
                 if (groups == 1)
                 {
-                    Color linear = pigmentSettings.spawnColors[0].linear;
-                    spawnData.pigmentColors[i] = new Vector4(linear.r, linear.g, linear.b, linear.a);
+                    spawnData.pigmentColors[i] = EncodePigment(pigmentSettings.spawnColors[0], pigmentSettings);
                 }
             }
 
@@ -120,8 +137,7 @@ public sealed class SpawnSystem3D
                 spawnData.positions[i]  = (float3)l2w.MultiplyPoint3x4(pos);
                 spawnData.velocities[i] = float3.zero;
 
-                Color linear = pigmentSettings.spawnColors[g].linear;
-                spawnData.pigmentColors[i] = new Vector4(linear.r, linear.g, linear.b, linear.a);
+                spawnData.pigmentColors[i] = EncodePigment(pigmentSettings.spawnColors[g], pigmentSettings);
             }
 
             return spawnData;
@@ -160,9 +176,8 @@ public sealed class SpawnSystem3D
             spawnData.pigmentColors = new Vector4[n];
             for (int i = 0; i < n; i++)
             {
-                int   g      = Mathf.Clamp((int)((float)i / n * groups), 0, groups - 1);
-                Color linear = pigmentSettings.spawnColors[g].linear;
-                spawnData.pigmentColors[i] = new Vector4(linear.r, linear.g, linear.b, linear.a);
+                int g = Mathf.Clamp((int)((float)i / n * groups), 0, groups - 1);
+                spawnData.pigmentColors[i] = EncodePigment(pigmentSettings.spawnColors[g], pigmentSettings);
             }
         }
 

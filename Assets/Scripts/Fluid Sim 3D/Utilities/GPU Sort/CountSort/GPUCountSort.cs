@@ -63,17 +63,17 @@ namespace Fluid_Sim_3D.Utilities.GPU_Sort.CountSort
 			cs.SetInt(ID_NumInputs, count);
 
 			// ---- Run ----
-			global::J_Fluid_Sim_2D.Utilities.ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
-			global::J_Fluid_Sim_2D.Utilities.ComputeHelper.Dispatch(cs, count, kernelIndex: CountKernel);
+			ComputeHelper.Dispatch(cs, count, kernelIndex: ClearCountsKernel);
+			ComputeHelper.Dispatch(cs, count, kernelIndex: CountKernel);
 
 			scan.Run(countsBuffer);
-			global::J_Fluid_Sim_2D.Utilities.ComputeHelper.Dispatch(cs, count, kernelIndex: ScatterOutputsKernel);
-			global::J_Fluid_Sim_2D.Utilities.ComputeHelper.Dispatch(cs, count, kernelIndex: CopyBackKernel);
+			ComputeHelper.Dispatch(cs, count, kernelIndex: ScatterOutputsKernel);
+			ComputeHelper.Dispatch(cs, count, kernelIndex: CopyBackKernel);
 		}
 
 		public void Release()
 		{
-			global::J_Fluid_Sim_2D.Utilities.ComputeHelper.Release(sortedItemsBuffer, sortedValuesBuffer, countsBuffer);
+			ComputeHelper.Release(sortedItemsBuffer, sortedValuesBuffer, countsBuffer);
 			scan.Release();
 		}
 	}

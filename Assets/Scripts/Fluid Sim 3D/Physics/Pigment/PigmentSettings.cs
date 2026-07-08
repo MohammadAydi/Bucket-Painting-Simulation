@@ -11,6 +11,28 @@ public class PigmentSettings : ScriptableObject
 {
     public event Action OnChanged;
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Pigment mixing algorithm
+    // ─────────────────────────────────────────────────────────────────────
+    // LinearRGB : diffuse raw linear RGB (original behavior). Physically
+    //             correct for LIGHT, but paint pairs like yellow+blue
+    //             produce gray instead of green.
+    // RYB       : from-scratch, no external library. Re-parameterizes color
+    //             as amounts of Red/Yellow/Blue pigment (the classic 8-corner
+    //             RYB cube interpolation) before diffusing, then converts
+    //             back to RGB for display. Yellow+blue -> green.
+    //             See Physics/Pigment/ColorMixing.hlsl and RYBColorMixing.cs.
+    // Mixbox    : uses the Mixbox library (scrtwpns/mixbox) for physically
+    //             modeled (Kubelka-Munk) pigment mixing. Requires adding the
+    //             Mixbox Unity package and assigning the LUT + the
+    //             "Pigment Compute Shader (Mixbox)" slot on FluidManager3D.
+    //             CC BY-NC 4.0 license — non-commercial use only.
+    public enum PigmentMixingModel { LinearRGB, RYB, Mixbox }
+
+    [Header("Mixing Model")]
+    [Tooltip("How particle pigment colors combine when they diffuse into each other.")]
+    public PigmentMixingModel mixingModel = PigmentMixingModel.RYB;
+
     [Header("Diffusion")]
     [Tooltip("How fast pigment diffuses between neighbouring particles. " +
              "Mirrors ViscosityCoeff: 0 = no diffusion, higher = faster mixing.")]

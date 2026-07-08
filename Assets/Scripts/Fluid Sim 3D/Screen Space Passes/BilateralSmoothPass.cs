@@ -52,6 +52,22 @@ public class BilateralSmoothPass : ScriptableRenderPass, System.IDisposable
             RecordBilateral1D(renderGraph, compHandle, w, h, activeMat, iterations);
         else
             RecordBilateral2D(renderGraph, compHandle, w, h, activeMat, iterations);
+
+        // ── Also blur the pigment color RT, edge-stopped on ITS OWN alpha
+        //    (particle coverage) instead of depth — otherwise raw per-particle
+        //    colour splats show through as hard petal shapes even though the
+        //    surface geometry/normals are smooth. smoothMask=(1,1,1) blurs all
+        //    of R/G/B here (unlike the depth pass, which spares B). ─────────────
+        if (ParticleDepthPass.s_PigmentColorRT != null)
+        {
+            var pigmentHandle = renderGraph.ImportTexture(ParticleDepthPass.s_PigmentColorRT);
+            activeMat.SetVector(s_SmoothMask, new Vector3(1, 1, 1));
+
+            if (_feature.blurType == FluidRendererFeature.FluidBlurType.Bilateral1D)
+                RecordBilateral1D(renderGraph, pigmentHandle, w, h, activeMat, iterations);
+            else
+                RecordBilateral2D(renderGraph, pigmentHandle, w, h, activeMat, iterations);
+        }
     }
 
     void RecordBilateral1D(RenderGraph rg, TextureHandle compHandle,

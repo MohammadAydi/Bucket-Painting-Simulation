@@ -46,6 +46,7 @@ class FluidModel : IDisposable
     PigmentReorder   _pigmentReorder;
     PigmentDiffusion _pigmentDiffusion;
     ComputeShader    _pigmentCompute;
+    Texture2D        _mixboxLUT;
 
     public int ParticleCount { get; private set; }
 
@@ -55,11 +56,21 @@ class FluidModel : IDisposable
         SpawnData3D spawnData, ParticleSettings settings,
         ComputeShader sphCompute,
         ComputeShader pigmentCompute = null,
-        PigmentSettings pigmentSettings = null
+        PigmentSettings pigmentSettings = null,
+        ComputeShader pigmentComputeMixbox = null,
+        Texture2D mixboxLUT = null
     )
     {
-        _SPHCompute     = sphCompute;
-        _pigmentCompute = pigmentCompute;
+        _SPHCompute = sphCompute;
+
+        // Pick which pigment compute shader is actually active. Both files
+        // expose the same three kernel names (PigmentReorderKernel,
+        // PigmentReorderCopyBack, PigmentDiffusionKernel), so nothing else
+        // needs to change based on which one is selected.
+        bool useMixbox = pigmentSettings != null
+                       && pigmentSettings.mixingModel == PigmentSettings.PigmentMixingModel.Mixbox;
+        _pigmentCompute = useMixbox ? pigmentComputeMixbox : pigmentCompute;
+        _mixboxLUT      = useMixbox ? mixboxLUT : null;
         DisposeBuffers();
         ParticleCount = spawnData.positions.Length;
         if (ParticleCount <= 1)
@@ -101,7 +112,7 @@ class FluidModel : IDisposable
             _pigmentReorder   = new PigmentReorder(this, _pigmentCompute,
                                     "PigmentReorderKernel", "PigmentReorderCopyBack");
             _pigmentDiffusion = new PigmentDiffusion(this, _pigmentCompute,
-                                    "PigmentDiffusionKernel");
+                                    "PigmentDiffusionKernel", _mixboxLUT);
             _pigmentReorder.BindsBuffers();
             _pigmentDiffusion.BindsBuffers();
         }
@@ -121,8 +132,8 @@ class FluidModel : IDisposable
         _viscosityForce.Dispatch();
         _surfaceTensionForce.Dispatch();
         _integrate.Dispatch();
-        _canvasCollision .Dispatch();
-        _frictionForce.Dispatch();
+        // _canvasCollision .Dispatch();
+        // _frictionForce.Dispatch();
 
         // Pigment diffusion runs after integration so particle positions are final.
         // Diffusion reads PigmentBuffer, writes PigmentBufferWrite, then we swap

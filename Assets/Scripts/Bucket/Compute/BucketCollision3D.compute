@@ -4,45 +4,23 @@ static const float PI = 3.14159265f;
 
 struct HoleGPU
 {
-    float type;      
-    float location;  
-    float radius;
-    float width;
-    float height;
-    float angleDeg;
-    float heightPos;
-    float offsetX;
-    float offsetY;
+    float type; float location; float radius;
+    float width; float height; float angleDeg;
+    float heightPos; float offsetX; float offsetY;
 };
 
-struct DividerGPU
-{
-    float3 dir;
-    float3 normal;
-};
+struct DividerGPU { float3 dir; float3 normal; };
 
 RWStructuredBuffer<float3> _Positions;
 RWStructuredBuffer<float3> _Velocities;
-
 StructuredBuffer<HoleGPU> _Holes;
 StructuredBuffer<DividerGPU> _Dividers;
 
-uint _ParticleCount;
-uint _HoleCount;
-uint _DividerCount;
+uint _ParticleCount, _HoleCount, _DividerCount;
+float _BottomRadius, _TopRadius, _BucketHeight;
+float _WallThickness, _DividerHalfThickness, _ParticleRadius, _Restitution;
+float4x4 _BucketWorldToLocal, _BucketLocalToWorld;
 
-float _BottomRadius;   
-float _TopRadius;      
-float _BucketHeight;
-float _WallThickness;
-float _DividerHalfThickness;
-float _ParticleRadius;
-float _Restitution;
-
-float4x4 _BucketWorldToLocal;
-float4x4 _BucketLocalToWorld;
-
-// Check if particle is inside a side hole
 bool IsInSideHole(float3 pos, float currentRadius)
 {
     float angleDeg = degrees(atan2(pos.z, pos.x));
@@ -51,7 +29,7 @@ bool IsInSideHole(float3 pos, float currentRadius)
     for (uint i = 0; i < _HoleCount; i++)
     {
         HoleGPU h = _Holes[i];
-        if (h.location > 0.5) continue; // Skip bottom holes
+        if (h.location > 0.5) continue; 
 
         float angleDelta = abs(angleDeg - h.angleDeg);
         if (angleDelta > 180.0) angleDelta = 360.0 - angleDelta;
@@ -59,36 +37,29 @@ bool IsInSideHole(float3 pos, float currentRadius)
         float arcDist = radians(angleDelta) * currentRadius;
         float heightDist = pos.y - h.heightPos;
 
-        if (h.type < 0.5) // Circular
-        {
+        if (h.type < 0.5) {
             float dist = sqrt(arcDist * arcDist + heightDist * heightDist);
             if (dist < h.radius) return true;
-        }
-        else // Rectangular
-        {
+        } else {
             if (arcDist < h.width * 0.5 && abs(heightDist) < h.height * 0.5) return true;
         }
     }
     return false;
 }
 
-// Check if particle is inside a bottom hole
 bool IsInBottomHole(float3 pos)
 {
     for (uint i = 0; i < _HoleCount; i++)
     {
         HoleGPU h = _Holes[i];
-        if (h.location < 0.5) continue; // Skip side holes
+        if (h.location < 0.5) continue; 
 
         float dx = pos.x - h.offsetX;
         float dz = pos.z - h.offsetY;
 
-        if (h.type < 0.5) // Circular
-        {
+        if (h.type < 0.5) {
             if (sqrt(dx * dx + dz * dz) < h.radius) return true;
-        }
-        else // Rectangular
-        {
+        } else {
             if (abs(dx) < h.width * 0.5 && abs(dz) < h.height * 0.5) return true;
         }
     }
@@ -97,17 +68,12 @@ bool IsInBottomHole(float3 pos)
 
 void ResolveFloor(inout float3 pos, inout float3 vel, float radialDist)
 {
-    // Floor only exists within the bottom radius
     if (radialDist > _BottomRadius) return; 
-    
-    // Floor surface Y level
     float floorSurfaceY = _WallThickness + _ParticleRadius;
 
-    // Check if particle is hitting the floor
     if (pos.y > -_ParticleRadius && pos.y < floorSurfaceY)
     {
-        if (!IsInBottomHole(pos))
-        {
+        if (!IsInBottomHole(pos)) {
             pos.y = floorSurfaceY;
             if (vel.y < 0.0) vel.y = -vel.y * _Restitution;
         }
@@ -116,25 +82,24 @@ void ResolveFloor(inout float3 pos, inout float3 vel, float radialDist)
 
 void ResolveWall(inout float3 pos, inout float3 vel, float radialDist, float currentOuterR)
 {
-    // Wall only exists between Y = 0 and Y = BucketHeight
     if (pos.y <= 0.0 || pos.y >= _BucketHeight) return;
 
     float currentInnerR = currentOuterR - _WallThickness;
     float allowedInnerDist = currentInnerR - _ParticleRadius;
     float allowedOuterDist = currentOuterR + _ParticleRadius;
+    
+    // هام: تم توسيع نطاق الالتقاط لإرجاع الجسيمات التي قد تخترق الدلو بسبب السرعة
+    float catchRadius = currentOuterR + 1.0; 
 
-    // Check if particle is colliding with the wall surface
-    if (radialDist > allowedInnerDist && radialDist < allowedOuterDist)
+    if (radialDist > allowedInnerDist && radialDist < catchRadius)
     {
         if (!IsInSideHole(pos, currentOuterR))
         {
             float2 dir2 = pos.xz / max(radialDist, 0.0001);
             float slope = (_TopRadius - _BottomRadius) / _BucketHeight;
 
-            // Determine if particle is inside or outside to push correctly
             if (radialDist < currentInnerR + (_WallThickness * 0.5))
             {
-                // Push inside
                 pos.xz = dir2 * allowedInnerDist;
                 float3 normal = normalize(float3(-dir2.x, slope, -dir2.y));
                 float normalVel = dot(vel, normal);
@@ -142,7 +107,6 @@ void ResolveWall(inout float3 pos, inout float3 vel, float radialDist, float cur
             }
             else
             {
-                // Push outside
                 pos.xz = dir2 * allowedOuterDist;
                 float3 normal = normalize(float3(dir2.x, -slope, dir2.y));
                 float normalVel = dot(vel, normal);
@@ -154,20 +118,17 @@ void ResolveWall(inout float3 pos, inout float3 vel, float radialDist, float cur
 
 void ResolveDividers(inout float3 pos, inout float3 vel, float radialDist, float currentOuterR)
 {
-    // Dividers only exist inside the bucket
     if (pos.y <= _WallThickness || pos.y >= _BucketHeight || radialDist > currentOuterR) return;
 
     for (uint d = 0; d < _DividerCount; d++)
     {
         DividerGPU axis = _Dividers[d];
-        
         float normalCoord = dot(float2(axis.normal.x, axis.normal.z), pos.xz);
         float dirCoord = dot(float2(axis.dir.x, axis.dir.z), pos.xz);
         
         if (dirCoord > -(_DividerHalfThickness + _ParticleRadius))
         {
             float penetration = (_DividerHalfThickness + _ParticleRadius) - abs(normalCoord);
-
             if (penetration > 0.0)
             {
                 float pushSign = sign(normalCoord);
@@ -188,25 +149,21 @@ void ResolveBucketCollisions(uint3 id : SV_DispatchThreadID)
 
     float3 pos = mul(_BucketWorldToLocal, float4(_Positions[id.x], 1.0)).xyz;
     
-    // Spatial Optimization: If particle is completely out of bounds, skip everything
-    float absoluteMaxRadius = max(_TopRadius, _BottomRadius) + 1.0;
-    if (pos.y < -1.0 || pos.y > _BucketHeight + 1.0 || length(pos.xz) > absoluteMaxRadius) return;
+    // هام: تم توسيع نطاق الخروج المبكر (Early Exit) لضمان عدم تجاهل الجسيمات السريعة
+    float absoluteMaxRadius = max(_TopRadius, _BottomRadius) + 5.0; 
+    if (pos.y < -5.0 || pos.y > _BucketHeight + 5.0 || length(pos.xz) > absoluteMaxRadius) return;
 
     float3 vel = mul((float3x3)_BucketWorldToLocal, _Velocities[id.x]);
-    
     float t = saturate(pos.y / max(_BucketHeight, 0.0001));
     float currentOuterR = lerp(_BottomRadius, _TopRadius, t);
     float radialDist = length(pos.xz);
 
-    // 2 iterations for stability in corners
     [unroll]
     for (int i = 0; i < 2; i++)
     {
         ResolveFloor(pos, vel, radialDist);
         ResolveWall(pos, vel, radialDist, currentOuterR);
         ResolveDividers(pos, vel, radialDist, currentOuterR);
-        
-        // Recalculate radial distance after position shifts
         radialDist = length(pos.xz);
     }
 

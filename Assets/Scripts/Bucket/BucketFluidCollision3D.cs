@@ -7,23 +7,13 @@ public class BucketFluidCollision3D : MonoBehaviour
     [StructLayout(LayoutKind.Sequential)]
     private struct HoleGPU
     {
-        public float type;
-        public float location;
-        public float radius;
-        public float width;
-        public float height;
-        public float angleDeg;
-        public float heightPos;
-        public float offsetX;
-        public float offsetY;
+        public float type; public float location; public float radius;
+        public float width; public float height; public float angleDeg;
+        public float heightPos; public float offsetX; public float offsetY;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct DividerGPU
-    {
-        public Vector3 dir;
-        public Vector3 normal;
-    }
+    private struct DividerGPU { public Vector3 dir; public Vector3 normal; }
 
     [Header("References")]
     public BucketGenerator bucket;
@@ -69,13 +59,9 @@ public class BucketFluidCollision3D : MonoBehaviour
                 {
                     type = h.type == BucketHoleCutter.HoleType.Circular ? 0f : 1f,
                     location = h.location == BucketHoleCutter.HoleLocation.Side ? 0f : 1f,
-                    radius = h.radius,
-                    width = h.width,
-                    height = h.height,
-                    angleDeg = h.angleDegrees,
-                    heightPos = h.heightPosition,
-                    offsetX = h.bottomOffset.x,
-                    offsetY = h.bottomOffset.y
+                    radius = h.radius, width = h.width, height = h.height,
+                    angleDeg = h.angleDegrees, heightPos = h.heightPosition,
+                    offsetX = h.bottomOffset.x, offsetY = h.bottomOffset.y
                 });
             }
         }
@@ -100,8 +86,7 @@ public class BucketFluidCollision3D : MonoBehaviour
             float currentAngle = 0f;
             for (int i = 0; i < ratios.Count; i++)
             {
-                data.Add(new DividerGPU
-                {
+                data.Add(new DividerGPU {
                     dir = new Vector3(Mathf.Cos(currentAngle), 0f, Mathf.Sin(currentAngle)),
                     normal = new Vector3(-Mathf.Sin(currentAngle), 0f, Mathf.Cos(currentAngle))
                 });
@@ -114,7 +99,8 @@ public class BucketFluidCollision3D : MonoBehaviour
         if (_dividerCount > 0) _dividersBuffer.SetData(data);
     }
 
-    public void ResolveCollisions()
+    // دالة جديدة تستقبل الموضع والدوران اللحظي لتحديث مصفوفات التحويل
+    public void ResolveCollisionsInterp(Vector3 interpPos, Quaternion interpRot)
     {
         if (fluidManager == null || bucket == null || bucketCollisionShader == null) return;
         
@@ -138,8 +124,12 @@ public class BucketFluidCollision3D : MonoBehaviour
         bucketCollisionShader.SetFloat("_ParticleRadius", particleRadius);
         bucketCollisionShader.SetFloat("_Restitution", restitution);
 
-        bucketCollisionShader.SetMatrix("_BucketWorldToLocal", bucket.transform.worldToLocalMatrix);
-        bucketCollisionShader.SetMatrix("_BucketLocalToWorld", bucket.transform.localToWorldMatrix);
+        // بناء مصفوفات التحويل بناءً على الموضع المستوفى
+        Matrix4x4 localToWorld = Matrix4x4.TRS(interpPos, interpRot, bucket.transform.lossyScale);
+        Matrix4x4 worldToLocal = localToWorld.inverse;
+
+        bucketCollisionShader.SetMatrix("_BucketWorldToLocal", worldToLocal);
+        bucketCollisionShader.SetMatrix("_BucketLocalToWorld", localToWorld);
 
         int groups = Mathf.CeilToInt(particleCount / 256f);
         bucketCollisionShader.Dispatch(_kernel, groups, 1, 1);

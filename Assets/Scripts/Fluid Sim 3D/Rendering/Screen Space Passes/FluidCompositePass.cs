@@ -25,7 +25,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
     {
         _feature = feature;
         renderPassEvent = RenderPassEvent.AfterRenderingTransparents+ 4;
-    //    ConfigureInput(ScriptableRenderPassInput.Depth);
+   
         if (_mat == null && feature.fluidCompositeShader)
             _mat = CoreUtils.CreateEngineMaterial(feature.fluidCompositeShader);
     }
@@ -41,7 +41,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
 
         FluidRTPool.EnsureCompositeOutRT(ref s_OutRT, w, h);
 
-       // _mat.SetColor(s_PaintColor,        _feature.paintColor);
+       
         _mat.SetFloat(s_SpecularStrength,  _feature.specularStrength);
         _mat.SetFloat(s_Shininess,         _feature.specularShininess);
         _mat.SetFloat(s_ReflectStrength,   _feature.reflectionStrength);

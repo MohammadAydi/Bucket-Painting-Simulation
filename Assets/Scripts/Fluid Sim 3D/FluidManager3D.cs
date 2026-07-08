@@ -13,16 +13,14 @@ public class FluidManager3D : MonoBehaviour
     [SerializeField] CanvasSurface canvasSurface;
 
     [Header("Pigment")]
-    [Tooltip("Assign the PigmentDiffusion compute shader to enable per-particle pigment.")]
+    [Tooltip("Assign a PigmentSettings asset to control diffusion and spawn colors.")]
     [SerializeField]
-    ComputeShader pigmentComputeShader;
-
-    [Tooltip("Assign a PigmentSettings asset to control diffusion and spawn colors.")] [SerializeField]
     PigmentSettings pigmentSettings;
 
     [Tooltip("OPTIONAL. Only used when PigmentSettings.mixingModel = Mixbox. " +
              "Assign your local Mixbox LUT texture.")]
-    
+    private ComputeShader pigmentComputeShader;
+
     private Texture2D mixboxLUT;
 
     FluidModel _fluidModel;
@@ -72,9 +70,10 @@ public class FluidManager3D : MonoBehaviour
     {
         if (boundaryVolume == null)
             boundaryVolume = FindAnyObjectByType<FluidBoundary3D>();
-        
-       
+
+
         mixboxLUT = Resources.Load<Texture2D>("Textures/MixboxLUT");
+        pigmentComputeShader = Resources.Load<ComputeShader>("Compute/Pigments/PigmentDiffusion");
     }
 
     void Start()

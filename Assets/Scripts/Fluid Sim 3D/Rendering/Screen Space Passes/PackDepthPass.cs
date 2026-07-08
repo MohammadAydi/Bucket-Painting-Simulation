@@ -7,7 +7,6 @@
 //     .a  = original depth reference — NEVER touched by any blur pass
 //           (used as bilateral edge-stop weight AND background sentinel)
 //
-// This mirrors Sebastian's SmoothThickPrepare pass, stripped to depth-only.
 // ──────────────────────────────────────────────────────────────────────────────
 
 using UnityEngine;
@@ -19,9 +18,7 @@ public class PackDepthPass : ScriptableRenderPass, System.IDisposable
 {
     static readonly int s_DepthTex = Shader.PropertyToID("Depth");
 
-    // The compRt is shared: PackDepth writes it, bilateral reads+writes it,
-    // Normal/Composite read it.
-    internal static RTHandle s_CompRT;   // RGBA32F, no depth buffer
+    internal static RTHandle s_CompRT;   
 
     FluidRendererFeature _feature;
     Material             _mat;

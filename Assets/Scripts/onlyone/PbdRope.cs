@@ -1,5 +1,3 @@
-
-
 using System;
 using UnityEngine;
 
@@ -109,13 +107,6 @@ namespace onlyone
         private Vector3 manualVelocity;
         private bool hasPreviousTarget = false;
 
-        // =====================================================================
-        // إضافة: مرجع لمنتصف المقبض (Handle Midpoint)
-        // =====================================================================
-        [Header("Handle Connection")]
-        [Tooltip("مرجع إلى منتصف المقبض (HandleMidpointTracker). سيتم استخدام هذا الموقع كنقطة اتصال الحبل.")]
-        [SerializeField] private Transform handleMidpoint;
-
         private LineRenderer lr;
         private int n; private float segLen;
         private Vector3[] pos, prev, renderPos;
@@ -140,10 +131,11 @@ namespace onlyone
                 enabled = false; return;
             }
             
-            if (dynamicBucket && !handleMidpoint)
+            // التحقق من وجود bobOverride عند استخدام dynamicBucket
+            if (dynamicBucket && !bobOverride)
             {
                 Debug.LogWarning(
-                    $"[{nameof(PbdRope)}] dynamicBucket is true but handleMidpoint is not assigned. " +
+                    $"[{nameof(PbdRope)}] dynamicBucket is true but bobOverride is not assigned. " +
                     "The rope will connect to the bucket's position instead of the handle midpoint.", this);
             }
             
@@ -188,6 +180,7 @@ namespace onlyone
         {
             ready = false;
  
+            // إعادة تعيين حالة الوضع اليدوي عند إعادة التهيئة
             IsManualMode = false;
             handleSize = 0;
             handleFirstIdx = 0;
@@ -274,7 +267,7 @@ namespace onlyone
             if (!dynamicBucket || !pendulum)
             {
                 Vector3 a = pivot.position;
-                Vector3 b = GetEndpointPosition();
+                Vector3 b = bobOverride ? bobOverride.position : bob.position;
                 for (int i = 0; i < n; i++)
                 {
                     pos[i] = Vector3.Lerp(a, b, (float)i / segments);
@@ -300,14 +293,6 @@ namespace onlyone
             Vector3 ePhi   = new Vector3(-sp, 0f, -cp);
             Vector3 vB = eTheta * (ropeLength * thD) + ePhi * (ropeLength * s * phD);
             prev[n - 1] = pos[n - 1] - vB * (fixedStep / substeps);
-        }
-
-        private Vector3 GetEndpointPosition()
-        {
-            if (dynamicBucket && handleMidpoint)
-                return handleMidpoint.position;
-            
-            return bobOverride ? bobOverride.position : bob.position;
         }
 
         private void InitTorsion()
@@ -410,18 +395,19 @@ namespace onlyone
             ClampStretch();
             PinEndpoints(trackVelocity: false);
 
-            // if (IsManualMode)
-            // {
-            //     int anchorSeg = Mathf.Max(0, handleFirstIdx - 1);
-            //     bucketTension = Mathf.Abs(lambda[anchorSeg]) / (dt * dt);
-            // }
-            // else
-            // {
-            //     float bucketMassEff = dynamicBucket ? bucketMass : Mathf.Max(1e-9f, linearDensity * segLen);
-            //     Vector3 bucketCorrection = pos[n - 1] - bucketPredicted;
-            //     Vector3 ropeForceOnBucket = bucketCorrection * (bucketMassEff / (dt * dt));
-            //     bucketTension = ropeForceOnBucket.magnitude;
-            // }
+            // حساب التوتر - يدعم الوضع اليدوي
+            if (IsManualMode)
+            {
+                int anchorSeg = Mathf.Max(0, handleFirstIdx - 1);
+                bucketTension = Mathf.Abs(lambda[anchorSeg]) / (dt * dt);
+            }
+            else
+            {
+                float bucketMassEff = dynamicBucket ? bucketMass : Mathf.Max(1e-9f, linearDensity * segLen);
+                Vector3 bucketCorrection = pos[n - 1] - bucketPredicted;
+                Vector3 ropeForceOnBucket = bucketCorrection * (bucketMassEff / (dt * dt));
+                bucketTension = ropeForceOnBucket.magnitude;
+            }
         }
  
         private void SolveSegment(int idx, float alphaTilde, float betaTilde)
@@ -573,7 +559,7 @@ namespace onlyone
         }
 
         // ================================================================
-        // الدالة PinEndpoints المعدلة - تعريف واحد فقط
+        // الدالة PinEndpoints المعدلة - مع دعم الوضع اليدوي
         // ================================================================
         private void PinEndpoints(bool trackVelocity)
         {
@@ -585,7 +571,7 @@ namespace onlyone
             pos[0] = pivot.position;
             
             if (!dynamicBucket)
-                pos[n - 1] = GetEndpointPosition();
+                pos[n - 1] = bobOverride ? bobOverride.position : bob.position;
 
             // ================================================================
             // الوضع اليدوي - المقبض الصلب مع الحفاظ على السرعة
@@ -706,9 +692,10 @@ namespace onlyone
                 }
             }
             
-            if (handleMidpoint)
+            // تحديث bobOverride إذا كان موجوداً
+            if (bobOverride)
             {
-                handleMidpoint.position = targetPos;
+                bobOverride.position = targetPos;
             }
         }
 
@@ -790,7 +777,7 @@ namespace onlyone
             {
                 int idx = handleFirstIdx + k;
                 invMass[idx] = cachedHandleInvMass[k];
-                // ✅ نحافظ على السرعة - لا نضع prev = pos
+                // نحافظ على السرعة - لا نضع prev = pos
             }
 
             IsManualMode = false;
@@ -864,12 +851,6 @@ namespace onlyone
                 Gizmos.DrawWireSphere(pivot.position, ropeLength);
                 Gizmos.color = new Color(1f, 0.1f, 0.1f, 0.85f);
                 Gizmos.DrawWireSphere(pivot.position, minimumManualDistance);
-            }
-
-            if (handleMidpoint)
-            {
-                Gizmos.color = Color.magenta;
-                Gizmos.DrawWireSphere(handleMidpoint.position, 0.03f);
             }
 
             if (Application.isPlaying && IsManualMode)

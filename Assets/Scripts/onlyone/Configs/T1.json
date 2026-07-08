@@ -3,7 +3,7 @@
     "gravity": 981.0, "fixedStep": 0.004,
     "bucketMass": 3.0, "bucketRadius": 13.0,
     "airDensity": 0.000001225, "bucketDragCoefficient": 1.0,
-    "length": 120.0, "startTheta": 0.0, "startPhi": 0.0,
+    "length": 120.0, "startTheta": 2.0, "startPhi": 0.0,
     "startThetaDot": 0.0, "startPhiDot": 0.0, "pivotFriction": 0.02,
     "segments": 26, "ropeLength": 122.0, "ropeWidth": 1.0,
     "linearDensity": 0.000895,

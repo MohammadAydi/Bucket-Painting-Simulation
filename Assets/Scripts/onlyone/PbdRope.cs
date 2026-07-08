@@ -98,7 +98,10 @@ namespace onlyone
         public float EffectiveRopeLength { get; private set; }
         public bool  IsBroken            { get; private set; }
         public int   BreakIndex          { get; private set; } = -1;
-
+        // سرعة الدلو المنشورة لكل فريم فيزيائي: يقرأها BucketFluidCollision3D لمعالجة الحركة السريعة (سويپت).
+        public Vector3 BucketLinearVelocity  { get; private set; }
+        public Vector3 BucketAngularVelocity { get; private set; } // rad/s, world space
+        public bool    RopeReady => ready;
         private LineRenderer fallenLr;
         private Vector3[]    topPiecePos, bottomPiecePos;
         private float[]      plasticStretch;
@@ -113,7 +116,7 @@ namespace onlyone
         private float[]   twist, twistPrev, invInertia, lambdaTw, refTwist;
         private Vector3[] tangent, prevTangent, refDir;
         private float     lastAppliedTwist;
-
+        private Quaternion prevBucketRotation;
         public float  TensionN     => bucketTension;
         public double TotalEnergyJ => currentState.totalEnergy;
         private RopeState currentState;
@@ -229,6 +232,12 @@ namespace onlyone
             BuildMasses();
             InitLineRenderer();
             LaunchFromInitialState();
+            // يطبّق موضع/اتجاه الدلو النهائيين للحالة الابتدائية فورًا (بدل الانتظار لأول LateUpdate)
+            // حتى يقرأ أي نظام آخر (توليد السائل، إلخ) الموضع الصحيح في نفس الفريم.
+            if (dynamicBucket) SnapBucketToInitialState();
+            BucketLinearVelocity  = Vector3.zero;
+            BucketAngularVelocity = Vector3.zero;
+            prevBucketRotation = bucketBody ? bucketBody.rotation : Quaternion.identity;
             InitTorsion();
 
             ready = true;
@@ -245,6 +254,7 @@ namespace onlyone
             if (accumulator > 0.25f) accumulator = 0.25f;
 
             float h = fixedStep / substeps;
+            bool moved = false;
             while (accumulator >= fixedStep)
             {
                 for (int s = 0; s < substeps; s++)
@@ -259,11 +269,12 @@ namespace onlyone
                     PublishState(h);
 
                 accumulator -= fixedStep;
+                moved = true;
             }
 
             BuildRenderPositions(accumulator / fixedStep);
             if (dynamicBucket)
-                DriveBucket();
+                DriveBucket(moved ? fixedStep : Time.deltaTime);
             Render();
         }
 
@@ -315,7 +326,25 @@ namespace onlyone
             Vector3 vB = eTheta * (ropeLength * thD) + ePhi * (ropeLength * s * phD);
             prev[n - 1] = pos[n - 1] - vB * (fixedStep / substeps);
         }
-
+        // ينقل bob/bucketBody فورًا إلى موضع نهاية الحبل المحسوبة في LaunchFromInitialState،
+        // بدل ترك DriveBucket تنقلها لاحقًا في أول LateUpdate (وهذا ما كان يسبب القفزة
+        // الفورية بعد أن يتولّد السائل في موضع الدلو الافتراضي القديم).
+        private void SnapBucketToInitialState()
+        {
+            if (n < 2) return;
+            Vector3 attach = bobOverride ? bobOverride.position : bob.position;
+            bob.position += pos[n - 1] - attach;
+            if (bucketBody)
+            {
+                Vector3 up = pos[n - 2] - pos[n - 1];
+                if (up.sqrMagnitude > 1e-8f)
+                {
+                    Vector3 upN = up.normalized;
+                    bucketBody.rotation = Quaternion.FromToRotation(bucketBody.up, upN) * bucketBody.rotation;
+                }
+            }
+            BuildRenderPositions(1f);
+        }
         private void InitTorsion()
         {
             twist       = new float[segments];
@@ -738,9 +767,9 @@ namespace onlyone
 
             elastic = eStretch + eBend + eTwist;
         }
-
-        private void DriveBucket()
+        private void DriveBucket(float dt)
         {
+            Vector3 bucketPosBefore = bucketBody ? bucketBody.position : (bobOverride ? bobOverride.position : bob.position);
             bool orientationValid = !(IsBroken && BreakIndex == segments - 1);
             if (orientationValid && bucketBody && n >= 2)
             {
@@ -761,6 +790,21 @@ namespace onlyone
             }
             Vector3 attach = bobOverride ? bobOverride.position : bob.position;
             bob.position += renderPos[n - 1] - attach;
+            // سرعة الدلو الخطية والزاوية العالمية، تُستخدم من نظام تصادم السائل لمعالجة الحركة السريعة (سويپت).
+            if (dt > 1e-8f)
+            {
+                Vector3 bucketPosAfter = bucketBody ? bucketBody.position : (bobOverride ? bobOverride.position : bob.position);
+                BucketLinearVelocity = (bucketPosAfter - bucketPosBefore) / dt;
+                if (bucketBody)
+                {
+                    Quaternion dq = bucketBody.rotation * Quaternion.Inverse(prevBucketRotation);
+                    dq.ToAngleAxis(out float angleDeg, out Vector3 axis);
+                    if (angleDeg > 180f) angleDeg -= 360f;
+                    if (float.IsNaN(axis.x) || axis.sqrMagnitude < 1e-8f) axis = Vector3.up;
+                    BucketAngularVelocity = axis.normalized * (angleDeg * Mathf.Deg2Rad / dt);
+                }
+                prevBucketRotation = bucketBody ? bucketBody.rotation : prevBucketRotation;
+            }
         }
 
         private void BuildRenderPositions(float alpha)

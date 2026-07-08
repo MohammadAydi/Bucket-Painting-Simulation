@@ -31,8 +31,6 @@ public class NormalReconstructPass : ScriptableRenderPass, System.IDisposable
 
         FluidRTPool.EnsureNormalRT(ref s_NormalRT, w, h);
 
-        // Bind compRT directly on the material — it's a persistent RTHandle so
-        // this is safe outside the graph and guaranteed to be set when the shader runs.
         _mat.SetTexture(s_MainTex, PackDepthPass.s_CompRT);
 
         var compHandle   = renderGraph.ImportTexture(PackDepthPass.s_CompRT);

@@ -50,8 +50,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
         _mat.SetFloat(s_FillLightStrength, _feature.fillLightStrength);
         _mat.SetColor(s_FillLightColor,    _feature.fillLightColor);
 
-        // Bind fluid textures directly on the material — persistent RTHandles,
-        // safe to set outside the graph, guaranteed bound when the shader runs.
+      
         _mat.SetTexture(s_CompTex,        PackDepthPass.s_CompRT);
         _mat.SetTexture(s_NormalTex,      NormalReconstructPass.s_NormalRT);
         _mat.SetTexture(s_PigmentColorTex, ParticleDepthPass.s_PigmentColorRT);
@@ -63,11 +62,7 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
         var colorHandle       = resourceData.activeColorTexture;
         var sceneDepthHandle  = resourceData.cameraDepthTexture;
 
-        // ── Pass A: Clear outRT to (0,0,0,0), then shade fluid pixels into it ─
-        // MUST clear every frame — outRT is persistent and discard() leaves stale
-        // data from previous frames, causing paint bleed across the whole scene.
-        // After the clear, fluid pixels write (color, alpha=1).
-        // Background pixels discard → stay (0,0,0,0).
+       
         using (var builder = renderGraph.AddRasterRenderPass<PassAData>("Fluid.Composite", out var data))
         {
             data.material = _mat;
@@ -82,22 +77,20 @@ public class FluidCompositePass : ScriptableRenderPass, System.IDisposable
 
             builder.SetRenderFunc((PassAData d, RasterGraphContext ctx) =>
             {
-                // Clear to fully transparent black so background pixels stay alpha=0
+                
                 ctx.cmd.ClearRenderTarget(false, true, Color.clear);
                 Blitter.BlitTexture(ctx.cmd, new Vector4(1, 1, 0, 0), d.material, 0);
             });
         }
 
-        // ── Pass B: Alpha-blend outRT over camera colour ──────────────────────
-        // fluid pixels  (alpha=1) → fully overwrite camera colour
-        // background    (alpha=0) → camera colour unchanged
+      
         using (var builder = renderGraph.AddRasterRenderPass<PassBData>("Fluid.CopyToCamera", out var data))
         {
             data.material  = _mat;
-            data.outHandle = outHandle;   // store handle in PassData — no lambda closure capture
+            data.outHandle = outHandle;   
 
             builder.UseTexture(outHandle, AccessFlags.Read);
-            builder.UseTexture(sceneDepthHandle, AccessFlags.Read);   // <-- NEW
+            builder.UseTexture(sceneDepthHandle, AccessFlags.Read);   
             builder.SetRenderAttachment(colorHandle, 0, AccessFlags.Write);
             builder.AllowPassCulling(false);
 

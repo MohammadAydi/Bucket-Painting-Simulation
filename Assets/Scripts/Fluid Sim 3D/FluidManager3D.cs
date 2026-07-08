@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// [ExecuteAlways]
+
 public class FluidManager3D : MonoBehaviour
 {
     [Header("References")] [SerializeField]

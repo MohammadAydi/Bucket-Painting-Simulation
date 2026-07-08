@@ -6,7 +6,7 @@
 
 TEXTURE2D(_MainTex);
 SAMPLER(sampler_MainTex);
-float4 _MainTex_TexelSize;   // (1/w, 1/h, w, h)
+float4 _MainTex_TexelSize; 
 
 float  worldRadius;
 int    maxScreenSpaceRadius;

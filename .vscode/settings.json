@@ -67,5 +67,5 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "Bucket-Painting-Simulation.slnx"
+    "dotnet.defaultSolution": "Bucket-Painting-Simulation2.slnx"
 }

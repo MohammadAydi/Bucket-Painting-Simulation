@@ -8,7 +8,7 @@ Shader "Fluid/ParticleCircle3D"
 
     SubShader
     {
-        // Changed to Geometry to allow Early-Z culling
+      
         Tags { "Queue" = "Geometry" "RenderType" = "Opaque" }
         ZWrite On
         Cull Off
@@ -32,7 +32,7 @@ Shader "Fluid/ParticleCircle3D"
             struct appdata
             {
                 float4 vertex : POSITION;
-                float3 normal : NORMAL; // Normal added for cheap shading
+                float3 normal : NORMAL;
             };
 
             struct v2f
@@ -45,17 +45,17 @@ Shader "Fluid/ParticleCircle3D"
             v2f vert(appdata v, uint instanceID : SV_InstanceID)
             {
                 v2f o;
-                o.normal = v.normal; // Pass normal directly to fragment
+                o.normal = v.normal; 
 
                 float3 position = _Position[instanceID];
                 float3 velocity = _Velocity[instanceID];
 
-                // Billboard offset in view space
+             
                 float3 objectVertPos = v.vertex.xyz * _ParticleRadius;
                 float4 viewPos = mul(UNITY_MATRIX_V, float4(position, 1.0)) + float4(objectVertPos, 0.0);
                 o.pos = mul(UNITY_MATRIX_P, viewPos);
 
-                // Move velocity coloring to the vertex shader
+              
                 float speed = length(velocity);
                 float speedT = saturate(speed / max(_VelocityMax, 0.0001));
                 o.color = _ColourMap.SampleLevel(linear_clamp_sampler, float2(speedT, 0.5), 0).rgb;
@@ -65,7 +65,7 @@ Shader "Fluid/ParticleCircle3D"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                // Simple, cheap diffuse shading (no discard, no sqrt, no matrix mult)
+               
                 float shading = saturate(dot(_WorldSpaceLightPos0.xyz, normalize(i.normal)));
                 shading = (shading + 0.6) / 1.4;
                 

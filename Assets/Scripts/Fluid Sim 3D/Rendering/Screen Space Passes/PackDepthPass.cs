@@ -1,14 +1,3 @@
-// PackDepthPass.cs
-// ──────────────────────────────────────────────────────────────────────────────
-// Pass 2: Blit the raw depthRt into the comp RGBA32F RT.
-//
-//   compRt layout:  float4( depth, 0, 0, depth )
-//     .r  = depth that the bilateral blur will smooth
-//     .a  = original depth reference — NEVER touched by any blur pass
-//           (used as bilateral edge-stop weight AND background sentinel)
-//
-// This mirrors Sebastian's SmoothThickPrepare pass, stripped to depth-only.
-// ──────────────────────────────────────────────────────────────────────────────
 
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -19,15 +8,12 @@ public class PackDepthPass : ScriptableRenderPass, System.IDisposable
 {
     static readonly int s_DepthTex = Shader.PropertyToID("Depth");
 
-    // The compRt is shared: PackDepth writes it, bilateral reads+writes it,
-    // Normal/Composite read it.
-    internal static RTHandle s_CompRT;   // RGBA32F, no depth buffer
+    internal static RTHandle s_CompRT;   
 
     FluidRendererFeature _feature;
     Material             _mat;
 
-    // ─────────────────────────────────────────────────────────────────────────
-    public void Setup(FluidRendererFeature feature)
+   public void Setup(FluidRendererFeature feature)
     {
         _feature = feature;
         renderPassEvent = RenderPassEvent.AfterRenderingTransparents+ 1;
@@ -36,7 +22,6 @@ public class PackDepthPass : ScriptableRenderPass, System.IDisposable
             _mat = CoreUtils.CreateEngineMaterial(feature.packDepthShader);
     }
 
-    // ── Render Graph ──────────────────────────────────────────────────────────
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
     {
         if (_mat == null) return;
@@ -47,11 +32,11 @@ public class PackDepthPass : ScriptableRenderPass, System.IDisposable
 
         FluidRTPool.EnsureCompRT(ref s_CompRT, w, h);
 
-        // Import both RTs into this frame
+     
         var srcHandle  = renderGraph.ImportTexture(ParticleDepthPass.s_DepthRT);
         var compHandle = renderGraph.ImportTexture(s_CompRT);
 
-        // Set the source texture on the material (immediate, outside graph)
+        
         _mat.SetTexture(s_DepthTex, ParticleDepthPass.s_DepthRT);
 
         using (var builder = renderGraph.AddRasterRenderPass<PassData>("Fluid.PackDepth", out var data))
@@ -64,8 +49,7 @@ public class PackDepthPass : ScriptableRenderPass, System.IDisposable
 
             builder.SetRenderFunc((PassData d, RasterGraphContext ctx) =>
             {
-                // Full-screen blit using the URP Blitter utility
-                // (avoids the need for a manual quad draw)
+               
                 Blitter.BlitTexture(ctx.cmd, new Vector4(1, 1, 0, 0), d.material, 0);
             });
         }

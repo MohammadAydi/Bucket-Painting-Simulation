@@ -1,7 +1,3 @@
-// FluidRendererSettings.cs
-// Add this to your FluidManager GameObject (or any scene object).
-// The Renderer Feature reads settings FROM this component automatically.
-// You never need to open the URP Renderer Asset again.
 
 using UnityEngine;
 

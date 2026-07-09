@@ -50,7 +50,7 @@ Texture2D _MixboxLUT;
 SamplerState sampler_MixboxLUT;
 #define MIXBOX_LUT(uv) _MixboxLUT.SampleLevel(sampler_MixboxLUT, uv, 0)
 
-#include "../../Physics/NeighborsSearching/NeighborsSearching.hlsl"
+#include "Assets/Scripts/Fluid Sim 3D/Physics/NeighborsSearching/NeighborsSearching.hlsl"
 #include "./Mixbox.hlsl"
 
 

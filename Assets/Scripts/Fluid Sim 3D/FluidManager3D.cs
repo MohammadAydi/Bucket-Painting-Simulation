@@ -3,7 +3,7 @@ using UnityEngine;
 
 public class FluidManager3D : MonoBehaviour
 {
-    [Header("References")] 
+    [Header("References")]
     [SerializeField] FluidBoundary3D boundaryVolume;
     [SerializeField] ParticleSettings settings;
     [SerializeField] ComputeShader fluidComputeShader;
@@ -12,22 +12,21 @@ public class FluidManager3D : MonoBehaviour
     [SerializeField] CanvasSurface canvasSurface;
 
     [Header("Pigment")]
-    [Tooltip("Assign the PigmentDiffusion compute shader to enable per-particle pigment.")]
+    [Tooltip("Assign a PigmentSettings asset to control diffusion and spawn colors.")]
     [SerializeField]
-    ComputeShader pigmentComputeShader;
-
-    [Tooltip("Assign a PigmentSettings asset to control diffusion and spawn colors.")] [SerializeField]
     PigmentSettings pigmentSettings;
+
+    private ComputeShader pigmentComputeShader;
 
     [Tooltip("OPTIONAL. Only used when PigmentSettings.mixingModel = Mixbox. " +
              "Assign your local Mixbox LUT texture.")]
-    
     private Texture2D mixboxLUT;
+
     FluidModel _fluidModel;
 
     [Header("Time Step")] public float normalTimeScale = 1;
     public float slowTimeScale = 0.1f;
-    public float maxTimestepFPS = 60; 
+    public float maxTimestepFPS = 60;
     public int iterationsPerFrame = 3;
     public bool inSlowMode = false;
 
@@ -35,9 +34,8 @@ public class FluidManager3D : MonoBehaviour
     public ParticleSettings SimSettings => settings;
     private float ActiveTimeScale => inSlowMode ? slowTimeScale : normalTimeScale;
     bool _initialized;
-    
-    // متغير لتتبع الروتين المساعد الخاص بالتهيئة لمنع تشغيله عدة مرات متداخلة
-    private Coroutine _initCoroutine; 
+
+    private Coroutine _initCoroutine;
 
     // Settings Cache
     int _lastParticleCount, _lastSphereResolution;
@@ -55,7 +53,6 @@ public class FluidManager3D : MonoBehaviour
     public ComputeBuffer PigmentBuffer => _fluidModel?.PigmentBuffer;
     public PigmentSettings PigmentSettings => pigmentSettings;
 
-    // تتبع موضع الدلو للاستيفاء (Interpolation)
     private Vector3 _prevBucketPos;
     private Quaternion _prevBucketRot;
 
@@ -63,16 +60,17 @@ public class FluidManager3D : MonoBehaviour
     {
         if (boundaryVolume == null)
             boundaryVolume = FindAnyObjectByType<FluidBoundary3D>();
+
         mixboxLUT = Resources.Load<Texture2D>("Textures/MixboxLUT");
+        pigmentComputeShader = Resources.Load<ComputeShader>("Compute/Pigments/PigmentDiffusion");
     }
 
     void Start()
     {
         if (settings != null) settings.OnChanged += OnSettingsChanged;
-        
-        // بدء التهيئة مع تأخير 0.5 ثانية عند التشغيل
+
         if (_initCoroutine != null) StopCoroutine(_initCoroutine);
-        _initCoroutine = StartCoroutine(InitializeSystemsRoutine(0.5f));
+        _initCoroutine = StartCoroutine(InitializeSystemsRoutine(0.1f));
     }
 
     void OnEnable()
@@ -82,7 +80,7 @@ public class FluidManager3D : MonoBehaviour
             settings.OnChanged -= OnSettingsChanged;
             settings.OnChanged += OnSettingsChanged;
         }
-        
+
         if (_initCoroutine != null) StopCoroutine(_initCoroutine);
         _initCoroutine = StartCoroutine(InitializeSystemsRoutine(0.1f));
     }
@@ -90,7 +88,7 @@ public class FluidManager3D : MonoBehaviour
     void Update()
     {
         if (!Application.isPlaying || !_initialized || boundaryVolume == null) return;
-        float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; 
+        float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity;
         float dt = Mathf.Min(Time.deltaTime * ActiveTimeScale, maxDeltaTime);
         RunSimulationFrame(dt);
     }
@@ -111,15 +109,14 @@ public class FluidManager3D : MonoBehaviour
 
         for (int i = 0; i < iterationsPerFrame; i++)
         {
-            _fluidModel.Step();
-            
+            _fluidModel.Step(canvasSurface);
+
             if (bucketCollision != null && bucketCollision.enabled)
             {
-                // حساب الموضع اللحظي للدلو في هذا الـ Substep
                 float t = (i + 1) / (float)iterationsPerFrame;
                 Vector3 interpPos = Vector3.Lerp(_prevBucketPos, currentBucketPos, t);
                 Quaternion interpRot = Quaternion.Slerp(_prevBucketRot, currentBucketRot, t);
-                
+
                 bucketCollision.ResolveCollisionsInterp(interpPos, interpRot);
             }
         }
@@ -134,13 +131,10 @@ public class FluidManager3D : MonoBehaviour
         DisposeSystems();
     }
 
-    // تحويل تابع التهيئة إلى روتين مساعد (Coroutine) يدعم التأخير الزمني
     IEnumerator InitializeSystemsRoutine(float delay)
     {
-        // إيقاف أي محاكاة سابقة أو تصفيرها فوراً لمنع الأخطاء خلال فترة الانتظار
         DisposeSystems();
 
-        // إيقاف التنفيذ للمدة المحددة (0.5 ثانية) ريثما تستقر الفيزياء
         if (delay > 0f)
         {
             yield return new WaitForSeconds(delay);
@@ -155,7 +149,7 @@ public class FluidManager3D : MonoBehaviour
         SpawnData3D spawnData = (bucket != null)
             ? _spawnSystem.SpawnParticlesInBucket(bucket, pigmentSettings)
             : _spawnSystem.SpawnParticles(boundaryVolume, pigmentSettings);
-            
+
         _fluidModel = new FluidModel(spawnData, settings, fluidComputeShader, pigmentComputeShader, pigmentSettings, mixboxLUT);
         _fluidModel.SetSmoothingConstant(settings.smoothingRadius);
 
@@ -166,7 +160,7 @@ public class FluidManager3D : MonoBehaviour
         }
 
         CacheSettings();
-        _initialized = true; // السماح لدالة Update ببدء المحاكاة الآن
+        _initialized = true;
     }
 
     void DisposeSystems()
@@ -185,13 +179,12 @@ public class FluidManager3D : MonoBehaviour
                                     _lastParticleSpacing != settings.particleSpacing || _lastSphereResolution != settings.sphereResolution;
 
         if (_lastSmoothingRadius != settings.smoothingRadius) _fluidModel.SetSmoothingConstant(settings.smoothingRadius);
-        
-        if (requiresReinitialize) 
-        { 
-            // عند تغيير الإعدادات أثناء تشغيل المشهد، نقوم بإعادة التهيئة فوراً وبدون تأخير (0 ثانية)
+
+        if (requiresReinitialize)
+        {
             if (_initCoroutine != null) StopCoroutine(_initCoroutine);
-            _initCoroutine = StartCoroutine(InitializeSystemsRoutine(0f)); 
-            return; 
+            _initCoroutine = StartCoroutine(InitializeSystemsRoutine(0f));
+            return;
         }
 
         if (_lastPressureSolverMethod != settings.pressureSolverMethod) _fluidModel.setPressureSolver(settings.pressureSolverMethod);

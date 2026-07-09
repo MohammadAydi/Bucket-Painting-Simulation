@@ -42,13 +42,13 @@ namespace onlyone
         [Header("Torsion")]
         public bool  enableTorsion = true;
         public float initialTurns = 8f;
-        public float torsionalStiffness = 25f;
+        public float torsionalStiffness = 5000f;
         public float dampingRatio = 0.10f;
         public int   torsionIterations = 8;
         public bool  clampPivotTwist = true;
         public float maxTwistRate = 600f;
 
         public float stretchDampingRatio;
-
+        public float torsionRadius = 5f;
     }
 }

@@ -174,7 +174,7 @@ namespace onlyone
             initialTurns          = c.initialTurns;
             torsionalStiffness    = c.torsionalStiffness;
             dampingRatio          = c.dampingRatio;
-            // torsionRadius         = c.torsionRadius;
+            torsionRadius         = c.torsionRadius;
             torsionIterations     = Mathf.Max(1, c.torsionIterations);
             clampPivotTwist       = c.clampPivotTwist;
             maxTwistRate          = c.maxTwistRate;

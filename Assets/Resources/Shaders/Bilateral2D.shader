@@ -1,8 +1,4 @@
-// Shaders/BilateralFilter2D.shader
-// ──────────────────────────────────────────────────────────────────────────────
-// Single-pass 2-D bilateral filter.
-// URP port of Sebastian's Hidden/BilateralFilter2D.
-// ──────────────────────────────────────────────────────────────────────────────
+
 Shader "Fluid/BilateralFilter2D"
 {
     SubShader

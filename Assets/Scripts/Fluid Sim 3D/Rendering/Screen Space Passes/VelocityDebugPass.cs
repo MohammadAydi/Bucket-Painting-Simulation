@@ -12,24 +12,23 @@ using UnityEngine.Rendering.RenderGraphModule;
 
 public sealed class VelocityDebugPass : ScriptableRenderPass, System.IDisposable
 {
-    // ── Shader property IDs ──────────────────────────────────────────────────
+   
     static readonly int s_PositionId    = Shader.PropertyToID("_Position");
     static readonly int s_VelocityId    = Shader.PropertyToID("_Velocity");
     static readonly int s_RadiusId      = Shader.PropertyToID("_ParticleRadius");
     static readonly int s_VelocityMaxId = Shader.PropertyToID("_VelocityMax");
     static readonly int s_ColourMapId   = Shader.PropertyToID("_ColourMap");
 
-    // ── Pass-local GPU resources ─────────────────────────────────────────────
+ 
     Material      _mat;
     Mesh          _quad;
     ComputeBuffer _argsBuffer;
     Texture2D     _gradientTex;
 
-    // ── Cached values to detect when we need to re-bake the gradient ─────────
+   
     int   _cachedParticleCount = -1;
     int   _cachedGradientRes   = -1;
 
-    // ── Render Graph pass data ────────────────────────────────────────────────
     class PassData
     {
         public Mesh           quad;
@@ -38,12 +37,12 @@ public sealed class VelocityDebugPass : ScriptableRenderPass, System.IDisposable
         public Bounds         bounds;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+   
     public void Setup(FluidRendererFeature feature)
     {
         renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
 
-        // Create material from the velocity debug shader assigned in the feature
+     
         if (_mat == null && feature.velocityDebugShader != null)
         {
             _mat = CoreUtils.CreateEngineMaterial(feature.velocityDebugShader);
@@ -57,22 +56,21 @@ public sealed class VelocityDebugPass : ScriptableRenderPass, System.IDisposable
         var settings = manager?.SimSettings;
         if (manager == null || settings == null) return;
 
-        // ── Bind GPU buffers onto the material ───────────────────────────────
-        // These are stable references; re-binding every frame is cheap.
+      
         _mat.SetBuffer(s_PositionId,    manager.PositionsBuffer);
         _mat.SetBuffer(s_VelocityId,    manager.VelocitiesBuffer);
         _mat.SetFloat (s_RadiusId,      settings.radius);
         _mat.SetFloat (s_VelocityMaxId, settings.velocityDisplayMax);
 
-        // Re-bake gradient only when resolution changes
+     
         BakeGradientIfNeeded(settings.colourMap, settings.gradientResolution);
         _mat.SetTexture(s_ColourMapId, _gradientTex);
 
-        // Update indirect args if particle count changed
+       
         UpdateArgsBuffer(manager.ParticleCount);
     }
 
-    // ── Render Graph entry point ──────────────────────────────────────────────
+  
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
     {
         if (_mat == null || _quad == null || _argsBuffer == null) return;
@@ -80,9 +78,7 @@ public sealed class VelocityDebugPass : ScriptableRenderPass, System.IDisposable
         var resourceData = frameData.Get<UniversalResourceData>();
         var cameraData   = frameData.Get<UniversalCameraData>();
 
-        // Build bounds from the camera far plane as a conservative fallback
-        // (the proper bounds come from the boundary volume; we use a generous
-        //  estimate here so GPU culling never clips the particles)
+        
         Bounds bounds = new Bounds(
             cameraData.camera.transform.position,
             Vector3.one * cameraData.camera.farClipPlane * 2f
@@ -96,7 +92,7 @@ public sealed class VelocityDebugPass : ScriptableRenderPass, System.IDisposable
             data.argsBuffer  = _argsBuffer;
             data.bounds      = bounds;
 
-            // Write into the camera's active color target
+          
             builder.SetRenderAttachment(resourceData.activeColorTexture, 0,
                 AccessFlags.Write);
             builder.SetRenderAttachmentDepth(resourceData.activeDepthTexture,
@@ -112,7 +108,7 @@ public sealed class VelocityDebugPass : ScriptableRenderPass, System.IDisposable
         }
     }
 
-    // ── IDisposable ───────────────────────────────────────────────────────────
+  
     public void Dispose()
     {
         DestroyMaterial();
@@ -121,7 +117,7 @@ public sealed class VelocityDebugPass : ScriptableRenderPass, System.IDisposable
         DestroyGradientTexture();
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+ 
     void BakeGradientIfNeeded(Gradient gradient, int resolution)
     {
         resolution = Mathf.Max(2, resolution);
@@ -155,8 +151,8 @@ public sealed class VelocityDebugPass : ScriptableRenderPass, System.IDisposable
         _cachedParticleCount = particleCount;
         uint[] args = new uint[5]
         {
-            _quad.GetIndexCount(0),  // index count per instance
-            (uint)particleCount,     // instance count
+            _quad.GetIndexCount(0),  
+            (uint)particleCount,    
             0, 0, 0
         };
         _argsBuffer.SetData(args);

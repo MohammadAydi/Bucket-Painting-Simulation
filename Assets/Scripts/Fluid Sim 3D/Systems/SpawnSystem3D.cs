@@ -15,8 +15,6 @@ public sealed class SpawnSystem3D
 
     // Encodes an author-facing sRGB spawn color into whatever representation
     // the active PigmentMixingModel diffuses in:
-    //   LinearRGB / Mixbox : stored as plain linear RGB (Mixbox's own kernel
-    //                        converts to/from its latent space internally).
     static Vector4 EncodePigment(Color spawnColor, PigmentSettings pigmentSettings)
     {
         Color linear = spawnColor.linear;
@@ -44,15 +42,10 @@ public sealed class SpawnSystem3D
             pigmentColors = groups > 0 ? new Vector4[n] : null
         };
 
-        // When exactly 2 color groups: spawn two separate edge-hugging cubes.
-        // Each cube occupies the inner 25 % of the X range on its respective side,
-        // leaving a clear gap in the middle so they start visually separated.
         if (groups == 2)
         {
             float fullWidth = xMax - xMin;
             float cubeWidth = fullWidth * 0.25f;
-            // Left cube  : [xMin,              xMin + cubeWidth]
-            // Right cube : [xMax - cubeWidth,  xMax            ]
             float leftXMax  = xMin + cubeWidth;
             float rightXMin = xMax - cubeWidth;
 
@@ -60,9 +53,7 @@ public sealed class SpawnSystem3D
 
             for (int i = 0; i < n; i++)
             {
-                // First half → left cube, second half → right cube
                 bool isRight = i >= half;
-
                 float localXMin = isRight ? rightXMin : xMin;
                 float localXMax = isRight ? xMax      : leftXMax;
 
@@ -74,9 +65,6 @@ public sealed class SpawnSystem3D
                 spawnData.positions[i]  = (float3)l2w.MultiplyPoint3x4(localPos);
                 spawnData.velocities[i] = float3.zero;
 
-                // Color is tied to the physical X position, not the loop index,
-                // so it survives any buffer reordering FluidModel may do.
-                // midLocal is the gap centre in local space.
                 float midLocal = (leftXMax + rightXMin) * 0.5f;
                 int   g        = x < midLocal ? 0 : 1;
 
@@ -86,7 +74,6 @@ public sealed class SpawnSystem3D
             return spawnData;
         }
 
-        // Fallback for 0 or 1 groups: fully random spawn (original behavior)
         if (groups <= 1)
         {
             Vector3[] localPositions = _particlesSpawner.RandomSpawnParticles(
@@ -107,7 +94,6 @@ public sealed class SpawnSystem3D
             return spawnData;
         }
 
-        // General case: N groups → N equal vertical slabs across X
         {
             Vector3[] localPositions = _particlesSpawner.RandomSpawnParticles(
                 boundary.LocalMin, boundary.LocalMax);
@@ -138,35 +124,87 @@ public sealed class SpawnSystem3D
     public SpawnData3D SpawnParticlesInBucket(BucketGenerator bucket, PigmentSettings pigmentSettings = null)
     {
         int n = _settings.particleCount;
+        int groups = (pigmentSettings?.spawnColors != null) ? pigmentSettings.spawnColors.Length : 0;
+
         SpawnData3D spawnData = new SpawnData3D
         {
             positions  = new float3[n],
-            velocities = new float3[n]
+            velocities = new float3[n],
+            pigmentColors = groups > 0 ? new Vector4[n] : null
         };
 
-        float innerRadius = bucket.bottomRadius - bucket.thickness - _settings.radius;
-        float minHeight   = bucket.thickness + _settings.radius;
-        float maxHeight   = bucket.height + 0.05f;
-        Matrix4x4 l2w     = bucket.transform.localToWorldMatrix;
+        float particleRadius = _settings.radius;
+        // تقييد التوليد ليكون فوق أرضية الدلو وتحت الحافة العلوية بقليل
+        float minHeight = bucket.thickness + particleRadius;
+        float maxHeight = bucket.height - particleRadius; 
+        Matrix4x4 l2w = bucket.transform.localToWorldMatrix;
 
         for (int i = 0; i < n; i++)
         {
-            float r     = innerRadius * Mathf.Sqrt(UnityEngine.Random.value);
-            float theta = UnityEngine.Random.value * 2f * Mathf.PI;
-            float y     = Mathf.Lerp(minHeight, maxHeight, UnityEngine.Random.value);
-            float x     = r * Mathf.Cos(theta);
-            float z     = r * Mathf.Sin(theta);
+            Vector3 localPos = Vector3.zero;
+            bool validPoint = false;
+            int maxAttempts = 100; // منع الحلقات اللانهائية
 
-            spawnData.positions[i]  = (float3)l2w.MultiplyPoint3x4(new Vector3(x, y, z));
-            spawnData.velocities[i] = float3.zero;
-        }
-
-        int groups = (pigmentSettings?.spawnColors != null) ? pigmentSettings.spawnColors.Length : 0;
-        if (groups > 0)
-        {
-            spawnData.pigmentColors = new Vector4[n];
-            for (int i = 0; i < n; i++)
+            // حلقة للبحث عن نقطة توليد صحيحة (Rejection Sampling)
+            while (!validPoint && maxAttempts > 0)
             {
+                maxAttempts--;
+                
+                float y = Mathf.Lerp(minHeight, maxHeight, UnityEngine.Random.value);
+                
+                // 1. حساب نصف القطر الداخلي عند هذا الارتفاع (لمراعاة الدلو المخروطي)
+                float currentOuterRadius = Mathf.Lerp(bucket.bottomRadius, bucket.topRadius, y / bucket.height);
+                float innerRadius = currentOuterRadius - bucket.thickness - particleRadius;
+                
+                if (innerRadius <= 0) break; // أمان في حال كانت السماكة أكبر من نصف القطر
+                
+                float r = innerRadius * Mathf.Sqrt(UnityEngine.Random.value);
+                float theta = UnityEngine.Random.value * 2f * Mathf.PI;
+                
+                float x = r * Mathf.Cos(theta);
+                float z = r * Mathf.Sin(theta);
+                
+                validPoint = true;
+
+                // 2. التحقق من الحواجز (Dividers) وتفادي التوليد بداخلها
+                if (bucket.compartmentRatios != null && bucket.compartmentRatios.Count > 1)
+                {
+                    float totalRatioSum = 0;
+                    foreach (float ratio in bucket.compartmentRatios) totalRatioSum += ratio;
+                    if (totalRatioSum <= 0) totalRatioSum = 1f;
+
+                    float currentAngle = 0f;
+                    for (int j = 0; j < bucket.compartmentRatios.Count; j++)
+                    {
+                        // حساب المتجه العمودي للحاجز
+                        Vector3 wallNormal = new Vector3(-Mathf.Sin(currentAngle), 0, Mathf.Cos(currentAngle));
+                        
+                        // المسافة العمودية بين النقطة والحاجز
+                        float distToDivider = Mathf.Abs(Vector3.Dot(new Vector3(x, 0, z), wallNormal));
+
+                        // إذا كانت النقطة داخل نطاق الحاجز يتم رفضها
+                        if (distToDivider < (bucket.dividerThickness / 2f) + particleRadius)
+                        {
+                            validPoint = false;
+                            break;
+                        }
+                        
+                        currentAngle += (bucket.compartmentRatios[j] / totalRatioSum) * 2f * Mathf.PI;
+                    }
+                }
+
+                if (validPoint)
+                {
+                    localPos = new Vector3(x, y, z);
+                }
+            }
+
+            spawnData.positions[i]  = (float3)l2w.MultiplyPoint3x4(localPos);
+            spawnData.velocities[i] = float3.zero;
+
+            if (groups > 0)
+            {
+                // إبقاء توزيع الألوان بناءً على مؤشر التوليد ليتوافق مع الإعدادات السابقة
                 int g = Mathf.Clamp((int)((float)i / n * groups), 0, groups - 1);
                 spawnData.pigmentColors[i] = EncodePigment(pigmentSettings.spawnColors[g], pigmentSettings);
             }

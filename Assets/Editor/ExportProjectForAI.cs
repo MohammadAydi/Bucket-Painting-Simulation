@@ -22,7 +22,6 @@ public class ExportProjectForAI
 
             "Assets/Scripts/Fluid Sim 3D/Data",
             "Assets/Scripts/Fluid Sim 3D/Display",
-            "Assets/Scripts/Fluid Sim 3D/HLSL",
             "Assets/Scripts/Fluid Sim 3D/physics",
             "Assets/Scripts/Fluid Sim 3D/Systems",
 
@@ -34,15 +33,13 @@ public class ExportProjectForAI
 
         string[] files =
         {
-            // "Assets/Scripts/Fluid Sim 3D/FluidManager3D.cs",
-            // "Assets/Scripts/Fluid Sim 3D/Config.cs",
+            "Assets/Editor/HoleDataDrawer.cs",
             "Assets/Settings/PC_Renderer.asset",
             "Assets/Scripts/Fluid Sim 3D/Utilities/FluidBoundary3D.cs",
             "Assets/Scripts/Fluid Sim 3D/Utilities/ComputeHelper.cs",
             "Assets/Scripts/Fluid Sim 3D/Utilities/ParticlesSpawner3D.cs",
             "Assets/Scripts/Fluid Sim 3D/Config.cs",
             "Assets/Scripts/Fluid Sim 3D/FluidManager3D.cs",
-            "Assets/Scripts/Fluid Sim 3D/FluidRendererSettings.cs",
         };
 
         StringBuilder builder = new StringBuilder();

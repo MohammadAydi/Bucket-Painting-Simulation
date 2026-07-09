@@ -6,11 +6,11 @@ using UnityEngine.Rendering.RenderGraphModule;
 [System.Serializable]
 public class FluidRendererFeature : ScriptableRendererFeature
 {
-    // ── Render mode ───────────────────────────────────────────────────────────
+    
     public enum RenderMode
     {
-        FluidSurface, // Full screen-space pipeline (depth → blur → normals → composite)
-        VelocityDebug // Particle billboards coloured by speed (replaces RenderSystem3D)
+        FluidSurface, 
+        VelocityDebug
     }
 
     private Shader _particleDepthShader;
@@ -29,7 +29,7 @@ public class FluidRendererFeature : ScriptableRendererFeature
     public Shader fluidCompositeShader => _fluidCompositeShader;
     public Shader velocityDebugShader => _velocityDebugShader;
 
-    // ── Runtime refs — found automatically from scene ─────────────────────────
+   
     [System.NonSerialized] public FluidManager3D fluidManager;
     [System.NonSerialized] public FluidRendererSettings settings;
 
@@ -50,10 +50,10 @@ public class FluidRendererFeature : ScriptableRendererFeature
         public int iterations;
     }
 
-    // ── Pigment buffer shortcut — read from FluidManager3D each frame ─────────
+  
     public ComputeBuffer pigmentBuffer => fluidManager?.PigmentBuffer;
 
-    // ── Shortcuts that read from the scene settings component ─────────────────
+   
     public RenderMode renderMode => settings ? settings.renderMode : RenderMode.FluidSurface;
     public float depthParticleSize => settings ? settings.depthParticleSize : 0.15f;
     public FluidBlurType blurType => settings ? settings.blurType : FluidBlurType.Bilateral1D;
@@ -70,14 +70,13 @@ public class FluidRendererFeature : ScriptableRendererFeature
     public bool useHalfLambert => settings ? settings.useHalfLambert : true;
     public float fillLightStrength => settings ? settings.fillLightStrength : 0.2f;
     public Color fillLightColor => settings ? settings.fillLightColor : new Color(0.4f, 0.35f, 0.3f);
-
-    // ── Passes ────────────────────────────────────────────────────────────────
+  
     ParticleDepthPass _depthPass;
     PackDepthPass _packPass;
     BilateralSmoothPass _bilateralPass;
     NormalReconstructPass _normalPass;
     FluidCompositePass _compositePass;
-    VelocityDebugPass _velocityDebugPass; // ← new
+    VelocityDebugPass _velocityDebugPass; 
 
     public override void Create()
     {
@@ -111,7 +110,7 @@ public class FluidRendererFeature : ScriptableRendererFeature
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
     {
-        // Auto-find scene objects every frame
+       
         if (fluidManager == null) fluidManager = Object.FindFirstObjectByType<FluidManager3D>();
         if (settings == null) settings = Object.FindFirstObjectByType<FluidRendererSettings>();
 
@@ -120,7 +119,7 @@ public class FluidRendererFeature : ScriptableRendererFeature
 
         if (renderMode == RenderMode.VelocityDebug)
         {
-            // ── Debug path: single billboard pass ────────────────────────────
+          
             if (_velocityDebugShader == null)
             {
                 Debug.LogError("[FluidRenderer] _velocityDebugShader missing! Assign ParticleCircle3D.");
@@ -132,7 +131,7 @@ public class FluidRendererFeature : ScriptableRendererFeature
         }
         else
         {
-            // ── Production path: full screen-space pipeline ───────────────────
+        
             if (!ValidateShaders()) return;
 
             _depthPass.Setup(this);

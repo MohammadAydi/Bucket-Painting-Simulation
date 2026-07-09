@@ -1,11 +1,4 @@
-// Shaders/BilateralFilter1D.shader
-// ──────────────────────────────────────────────────────────────────────────────
-// Two-pass 1-D bilateral filter (Pass 0 = horizontal, Pass 1 = vertical).
-// URP port of Sebastian's Hidden/BilateralFilter1D.
-//
-// Note: We keep the "Hidden/" prefix convention for blit shaders in URP too,
-// which just means they won't appear in the material shader picker.
-// ──────────────────────────────────────────────────────────────────────────────
+
 Shader "Fluid/BilateralFilter1D"
 {
     SubShader

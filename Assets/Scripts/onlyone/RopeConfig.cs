@@ -49,17 +49,6 @@ namespace onlyone
         public float maxTwistRate = 600f;
 
         public float stretchDampingRatio;
-        public float  density = 1140f;
-        public float  youngModulus = 3e8f;
-        public float  poissonRatio = 0.4f;
-        public bool   deriveFromMaterial = true;
 
-        public bool   breakable = true;
-        public float  ropeRadius = 0.004f;
-        public float  ultimateStress = 6e7f;
-        public float  safetyFactor = 1.2f;
-        public float  breakingStrain;
-        public bool   allowPlasticFailure;
-        public float  yieldStressRatio = 0.7f;
     }
 }

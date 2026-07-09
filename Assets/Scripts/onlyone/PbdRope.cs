@@ -174,7 +174,7 @@ namespace onlyone
             initialTurns          = c.initialTurns;
             torsionalStiffness    = c.torsionalStiffness;
             dampingRatio          = c.dampingRatio;
-            // torsionRadius         = c.torsionRadius;
+            torsionRadius         = c.torsionRadius;
             torsionIterations     = Mathf.Max(1, c.torsionIterations);
             clampPivotTwist       = c.clampPivotTwist;
             maxTwistRate          = c.maxTwistRate;
@@ -220,8 +220,6 @@ namespace onlyone
             BuildMasses();
             InitLineRenderer();
             LaunchFromInitialState();
-            // يطبّق موضع/اتجاه الدلو النهائيين للحالة الابتدائية فورًا (بدل الانتظار لأول LateUpdate)
-            // حتى يقرأ أي نظام آخر (توليد السائل، إلخ) الموضع الصحيح في نفس الفريم.
             if (dynamicBucket) SnapBucketToInitialState();
             BucketLinearVelocity  = Vector3.zero;
             BucketAngularVelocity = Vector3.zero;
@@ -308,9 +306,7 @@ namespace onlyone
             Vector3 vB = eTheta * (ropeLength * thD) + ePhi * (ropeLength * s * phD);
             prev[n - 1] = pos[n - 1] - vB * (fixedStep / substeps);
         }
-        // ينقل bob/bucketBody فورًا إلى موضع نهاية الحبل المحسوبة في LaunchFromInitialState،
-        // بدل ترك DriveBucket تنقلها لاحقًا في أول LateUpdate (وهذا ما كان يسبب القفزة
-        // الفورية بعد أن يتولّد السائل في موضع الدلو الافتراضي القديم).
+
         private void SnapBucketToInitialState()
         {
             if (n < 2) return;

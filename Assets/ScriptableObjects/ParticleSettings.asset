@@ -68,7 +68,7 @@ MonoBehaviour:
   targetDensity: 660
   nearPressureMultiplier: 2.16
   viscositySolverMethod: 0
-  viscosityCoeff: 44
+  viscosityCoeff: 202
   surfaceTensionSolverMethod: 0
   surfaceTensionCoeff: 0
   surfaceTensionThreshold: 0

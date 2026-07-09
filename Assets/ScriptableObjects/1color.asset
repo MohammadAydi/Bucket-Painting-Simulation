@@ -10,10 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4cb1bc980621e76449f455478cf6cd8a, type: 3}
-  m_Name: 2colors
+  m_Name: 1color
   m_EditorClassIdentifier: Assembly-CSharp::PigmentSettings
-  mixingModel: 0
-  diffusionCoeff: 2
+  mixingModel: 1
+  diffusionCoeff: 0.4
   spawnColors:
-  - {r: 1, g: 1, b: 0, a: 1}
   - {r: 0, g: 0, b: 1, a: 1}

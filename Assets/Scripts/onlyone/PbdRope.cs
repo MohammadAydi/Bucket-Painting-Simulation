@@ -129,6 +129,39 @@ namespace onlyone
         public double TotalEnergyJ => currentState.totalEnergy;
         private RopeState currentState;
 
+        // =====================================================================
+        // LIVE-TUNABLE PROPERTIES (for runtime settings UI)
+        // Non-structural params: safe to change every frame, no rebuild needed.
+        // =====================================================================
+        public float LiveGravity            { get => gravity; set => gravity = value; }
+        public Vector3 LiveWind             { get => wind; set => wind = value; }
+        public float LiveCompliance         { get => compliance; set => compliance = Mathf.Max(0f, value); }
+        public float LiveInternalDamping    { get => internalDampingRate; set => internalDampingRate = Mathf.Max(0f, value); }
+        public float LiveBendingStiffness   { get => bendingStiffness; set => bendingStiffness = Mathf.Max(0f, value); }
+        public bool  LiveEnableBending      { get => enableBending; set => enableBending = value; }
+        public float LiveTorsionalStiffness { get => torsionalStiffness; set => torsionalStiffness = Mathf.Max(0f, value); }
+        public float LiveDampingRatio       { get => dampingRatio; set => dampingRatio = Mathf.Clamp01(value); }
+        public bool  LiveEnableTorsion      { get => enableTorsion; set => enableTorsion = value; }
+        public float LiveAirDensity         { get => airDensity; set => airDensity = Mathf.Max(0f, value); }
+        public float LiveBucketDrag         { get => bucketDragCoefficient; set => bucketDragCoefficient = Mathf.Max(0f, value); }
+        public float LiveBucketMass         { get => bucketMass; set => bucketMass = Mathf.Max(0.01f, value); }
+        public float LiveMaxTwistRate       { get => maxTwistRate; set => maxTwistRate = Mathf.Max(1f, value); }
+        public bool  LiveDynamicBucket      { get => dynamicBucket; set => dynamicBucket = value; }
+
+        // Structural params: require a rope rebuild (InitializeRope) to take effect.
+        public int   StructSegments             { get => segments; set => segments = Mathf.Clamp(value, 2, 80); }
+        public float StructRopeLength           { get => ropeLength; set => ropeLength = Mathf.Max(0.01f, value); }
+        public float StructRopeWidth            { get => ropeWidth; set => ropeWidth = Mathf.Max(0.0005f, value); }
+        public int   StructSubsteps             { get => substeps; set => substeps = Mathf.Clamp(value, 1, 8); }
+        public int   StructConstraintIterations { get => constraintIterations; set => constraintIterations = Mathf.Clamp(value, 1, 80); }
+        public int   StructTorsionIterations    { get => torsionIterations; set => torsionIterations = Mathf.Clamp(value, 1, 40); }
+
+        /// <summary>Rebuilds the rope from current structural field values. Call after changing Struct* properties.</summary>
+        public void RebuildRope()
+        {
+            if (pivot && bob) InitializeRope();
+        }
+
         private void Start()
         {
             if (!pivot || !bob)

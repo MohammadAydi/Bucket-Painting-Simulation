@@ -132,4 +132,6 @@ public class ParticleSettings : ScriptableObject
             });
         return g;
     }
+    public void NotifyChanged() => OnChanged?.Invoke();
+
 }

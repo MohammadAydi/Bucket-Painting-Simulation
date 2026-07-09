@@ -50,6 +50,15 @@ namespace onlyone
         public bool IsManualFrozen => manualFreeze;
         public void SetManualFreeze(bool frozen) => manualFreeze = frozen;
 
+        // ── Live-tunable properties (independent/standalone mode) for runtime UI ──
+        public float LiveGravity         { get => gravity; set => gravity = value; }
+        public float LiveAirDensity      { get => airDensity; set => airDensity = Mathf.Max(0f, value); }
+        public float LivePivotFriction   { get => pivotFriction; set => pivotFriction = Mathf.Max(0f, value); }
+        public float LiveMass            { get => mass; set => mass = Mathf.Max(0.001f, value); }
+        public float LiveBucketRadius    { get => bucketRadius; set => bucketRadius = Mathf.Max(0f, value); }
+        public float LiveDragCoefficient { get => dragCoefficient; set => dragCoefficient = Mathf.Max(0f, value); }
+        public float LiveLength          { get => length; set => length = Mathf.Max(0.01f, value); }
+
         private const double MinSin = 1e-3;
         private float FrontalArea => Mathf.PI * bucketRadius * bucketRadius;
 

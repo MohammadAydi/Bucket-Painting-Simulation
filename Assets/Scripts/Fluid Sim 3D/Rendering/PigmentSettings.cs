@@ -36,4 +36,6 @@ public class PigmentSettings : ScriptableObject
     };
 
     void OnValidate() => OnChanged?.Invoke();
+    public void NotifyChanged() => OnChanged?.Invoke();
+
 }

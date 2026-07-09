@@ -152,14 +152,10 @@ MonoBehaviour:
   boundaryVolume: {fileID: 1562304914}
   settings: {fileID: 11400000, guid: e935e18c03d419345ab1e0a4542d807e, type: 2}
   fluidComputeShader: {fileID: 7200000, guid: 7433be18ba63a634abc5123f294dbfe7, type: 3}
-  particleMaterial: {fileID: 2100000, guid: 844544271cbfcc8428cda7c6a1428bd6, type: 2}
   bucket: {fileID: 0}
   bucketCollision: {fileID: 0}
   canvasSurface: {fileID: 0}
-  pigmentComputeShader: {fileID: 7200000, guid: 367f78b7ce40ef646a90bfb2a1eeb9b6, type: 3}
   pigmentSettings: {fileID: 11400000, guid: 5e3338df351280a4b935661ee4959e0e, type: 2}
-  pigmentComputeShaderMixbox: {fileID: 7200000, guid: 6f1f1a310a3845898aedb95ff1ad3fe9, type: 3}
-  mixboxLUT: {fileID: 2800000, guid: 316a7c5858acd3248a844952c2e551e6, type: 3}
   normalTimeScale: 1
   slowTimeScale: 0.1
   maxTimestepFPS: 60
@@ -192,6 +188,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 32e1b3319d9f4330a8e477bdc72f4cf2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FluidRendererSettings
+  renderMode: 0
   depthParticleSize: 0.1
   blurType: 0
   bilateralSettings:
@@ -200,7 +197,6 @@ MonoBehaviour:
     strength: 0.45
     diffStrength: 3.7
     iterations: 3
-  paintColor: {r: 2.1584904, g: 0.44783896, b: 0, a: 1}
   specularStrength: 0.8
   specularShininess: 64
   reflectionStrength: 0.15
@@ -220,6 +216,8 @@ GameObject:
   - component: {fileID: 691383804}
   - component: {fileID: 691383803}
   - component: {fileID: 691383806}
+  - component: {fileID: 691383807}
+  - component: {fileID: 691383808}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -345,6 +343,54 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &691383807
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 691383802}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4048696fce4c421599db72f3bf7aa415, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FluidCameraController
+  mode: 0
+  toggleModeKey: 9
+  orbitSensitivity: 3
+  panSensitivity: 0.5
+  scrollZoomSpeed: 2
+  minDistance: 0.5
+  maxDistance: 200
+  flySpeed: 5
+  flyLookSensitivity: 2
+  flyScrollSpeedMult: 1.2
+  flyBoostMultiplier: 3
+  flySmoothing: 8
+--- !u!114 &691383808
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 691383802}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4048696fce4c421599db72f3bf7aa415, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FluidCameraController
+  mode: 0
+  toggleModeKey: 9
+  orbitSensitivity: 3
+  panSensitivity: 0.5
+  scrollZoomSpeed: 2
+  minDistance: 0.5
+  maxDistance: 200
+  flySpeed: 5
+  flyLookSensitivity: 2
+  flyScrollSpeedMult: 1.2
+  flyBoostMultiplier: 3
+  flySmoothing: 8
 --- !u!1 &1109667627
 GameObject:
   m_ObjectHideFlags: 0
@@ -472,6 +518,53 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!1 &1239081221
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1239081223}
+  - component: {fileID: 1239081222}
+  m_Layer: 0
+  m_Name: SimulationHUD
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1239081222
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1239081221}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 668fd83ba33b6b447bcf38fafd8bb16c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SimulationHUD
+  toggleKey: 9
+  startVisible: 0
+  panelWidth: 380
+--- !u!4 &1239081223
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1239081221}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -2.28537, y: 0.5919, z: -12.42425}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1562304913
 GameObject:
   m_ObjectHideFlags: 0
@@ -594,7 +687,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 22.54832, y: 11, z: 23.4696}
+  m_LocalScale: {x: 35.53607, y: 11, z: 23.4696}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -607,3 +700,4 @@ SceneRoots:
   - {fileID: 1109667629}
   - {fileID: 1562304918}
   - {fileID: 262373073}
+  - {fileID: 1239081223}

@@ -105,9 +105,9 @@ public class StudioGenerator : MonoBehaviour
     {
         if (!Application.isPlaying)
         {
-            UnityEditor.EditorApplication.delayCall += () => {
-                if (this != null) GenerateStudio();
-            };
+            // UnityEditor.EditorApplication.delayCall += () => {
+            //     if (this != null) GenerateStudio();
+            // };
         }
     }
 }

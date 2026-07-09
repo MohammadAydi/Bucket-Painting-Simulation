@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public class FluidManager3D : MonoBehaviour
@@ -34,6 +35,9 @@ public class FluidManager3D : MonoBehaviour
     public ParticleSettings SimSettings => settings;
     private float ActiveTimeScale => inSlowMode ? slowTimeScale : normalTimeScale;
     bool _initialized;
+    
+    // متغير لتتبع الروتين المساعد الخاص بالتهيئة لمنع تشغيله عدة مرات متداخلة
+    private Coroutine _initCoroutine; 
 
     // Settings Cache
     int _lastParticleCount, _lastSphereResolution;
@@ -65,7 +69,10 @@ public class FluidManager3D : MonoBehaviour
     void Start()
     {
         if (settings != null) settings.OnChanged += OnSettingsChanged;
-        InitializeSystems();
+        
+        // بدء التهيئة مع تأخير 0.5 ثانية عند التشغيل
+        if (_initCoroutine != null) StopCoroutine(_initCoroutine);
+        _initCoroutine = StartCoroutine(InitializeSystemsRoutine(0.5f));
     }
 
     void OnEnable()
@@ -75,7 +82,9 @@ public class FluidManager3D : MonoBehaviour
             settings.OnChanged -= OnSettingsChanged;
             settings.OnChanged += OnSettingsChanged;
         }
-        InitializeSystems();
+        
+        if (_initCoroutine != null) StopCoroutine(_initCoroutine);
+        _initCoroutine = StartCoroutine(InitializeSystemsRoutine(0.1f));
     }
 
     void Update()
@@ -125,10 +134,19 @@ public class FluidManager3D : MonoBehaviour
         DisposeSystems();
     }
 
-    void InitializeSystems()
+    // تحويل تابع التهيئة إلى روتين مساعد (Coroutine) يدعم التأخير الزمني
+    IEnumerator InitializeSystemsRoutine(float delay)
     {
-        if (settings == null || fluidComputeShader == null || boundaryVolume == null) return;
+        // إيقاف أي محاكاة سابقة أو تصفيرها فوراً لمنع الأخطاء خلال فترة الانتظار
         DisposeSystems();
+
+        // إيقاف التنفيذ للمدة المحددة (0.5 ثانية) ريثما تستقر الفيزياء
+        if (delay > 0f)
+        {
+            yield return new WaitForSeconds(delay);
+        }
+
+        if (settings == null || fluidComputeShader == null || boundaryVolume == null) yield break;
 
         if (bucket == null) bucket = FindAnyObjectByType<BucketGenerator>();
         if (bucketCollision == null) bucketCollision = FindAnyObjectByType<BucketFluidCollision3D>();
@@ -148,7 +166,7 @@ public class FluidManager3D : MonoBehaviour
         }
 
         CacheSettings();
-        _initialized = true;
+        _initialized = true; // السماح لدالة Update ببدء المحاكاة الآن
     }
 
     void DisposeSystems()
@@ -167,7 +185,14 @@ public class FluidManager3D : MonoBehaviour
                                     _lastParticleSpacing != settings.particleSpacing || _lastSphereResolution != settings.sphereResolution;
 
         if (_lastSmoothingRadius != settings.smoothingRadius) _fluidModel.SetSmoothingConstant(settings.smoothingRadius);
-        if (requiresReinitialize) { InitializeSystems(); return; }
+        
+        if (requiresReinitialize) 
+        { 
+            // عند تغيير الإعدادات أثناء تشغيل المشهد، نقوم بإعادة التهيئة فوراً وبدون تأخير (0 ثانية)
+            if (_initCoroutine != null) StopCoroutine(_initCoroutine);
+            _initCoroutine = StartCoroutine(InitializeSystemsRoutine(0f)); 
+            return; 
+        }
 
         if (_lastPressureSolverMethod != settings.pressureSolverMethod) _fluidModel.setPressureSolver(settings.pressureSolverMethod);
         if (_lastViscositySolverMethod != settings.viscositySolverMethod) _fluidModel.setViscositySolver(settings.viscositySolverMethod);

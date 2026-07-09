@@ -1,6 +1,6 @@
 {
   "name": "نايلون ملفوف يخزّن طاقة توائية",
-  "gravity": 9.81, "fixedStep": 0.004,
+  "gravity": 981, "fixedStep": 0.004,
   "bucketMass": 3.0, "bucketRadius": 13,
   "airDensity": 0.000001225, "bucketDragCoefficient": 1.0,
   "length": 120, "startTheta": 20.0, "startPhi": 0.0,

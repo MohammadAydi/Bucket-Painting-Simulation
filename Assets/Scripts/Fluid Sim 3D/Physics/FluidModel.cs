@@ -43,10 +43,10 @@ class FluidModel : IDisposable
     GPUExecuter _integrate;
 
     // ── Pigment executors ─────────────────────────────────────────────────────
-    PigmentReorder   _pigmentReorder;
+    PigmentReorder _pigmentReorder;
     PigmentDiffusion _pigmentDiffusion;
-    ComputeShader    _pigmentCompute;
-    Texture2D        _mixboxLUT;
+    ComputeShader _pigmentCompute;
+    Texture2D _mixboxLUT;
 
     public int ParticleCount { get; private set; }
 
@@ -97,12 +97,12 @@ class FluidModel : IDisposable
             { PigmentBufferWrite,       Config.PigmentsWriteId },
             { SortTarget_PigmentBuffer, Config.SortTarget_PigmentsId },
         };
-        _gravityForce       = new GravityForce(this, sphCompute, "GravityForce");
-        _predictPositions   = new PositionPredictor(this, sphCompute, "PositionPredictor");
+        _gravityForce = new GravityForce(this, sphCompute, "GravityForce");
+        _predictPositions = new PositionPredictor(this, sphCompute, "PositionPredictor");
         _neighborsSearching = new NeighborsSearching(this, sphCompute);
-        _calcDensity        = new DensityCalc(this, sphCompute, "DensityCalculator");
-        _canvasCollision    = new CanvasCollisionSolver(this, sphCompute, "CanvasCollision");
-        _frictionForce      = new FrictionForce(this, sphCompute, "FrictionForce");
+        _calcDensity = new DensityCalc(this, sphCompute, "DensityCalculator");
+        _canvasCollision = new CanvasCollisionSolver(this, sphCompute, "CanvasCollision");
+        _frictionForce = new FrictionForce(this, sphCompute, "FrictionForce");
         setPressureSolver(settings.pressureSolverMethod);
         setViscositySolver(settings.viscositySolverMethod);
         setSurfaceTensionSolver(settings.surfaceTensionSolverMethod);
@@ -111,7 +111,7 @@ class FluidModel : IDisposable
         // Pigment system — only initialised when pigmentCompute is supplied
         if (_pigmentCompute != null)
         {
-            _pigmentReorder   = new PigmentReorder(this, _pigmentCompute,
+            _pigmentReorder = new PigmentReorder(this, _pigmentCompute,
                 "PigmentReorderKernel", "PigmentReorderCopyBack");
             _pigmentDiffusion = new PigmentDiffusion(this, _pigmentCompute,
                 diffusionKernel, _mixboxLUT);
@@ -122,7 +122,7 @@ class FluidModel : IDisposable
         BindBuffers();
     }
 
-    public void Step()
+    public void Step(CanvasSurface canvas = null)
     {
         _gravityForce.Dispatch();
         _predictPositions.Dispatch();
@@ -134,8 +134,11 @@ class FluidModel : IDisposable
         _viscosityForce.Dispatch();
         _surfaceTensionForce.Dispatch();
         _integrate.Dispatch();
-        // _canvasCollision .Dispatch();
-        // _frictionForce.Dispatch();
+        if (canvas != null)
+        {
+            _canvasCollision.Dispatch();
+            _frictionForce.Dispatch();
+        }
 
         // Pigment diffusion runs after integration so particle positions are final.
         // Diffusion reads PigmentBuffer, writes PigmentBufferWrite, then we swap
@@ -162,7 +165,7 @@ class FluidModel : IDisposable
     void SwapPigmentBuffers()
     {
         (PigmentBuffer, PigmentBufferWrite) = (PigmentBufferWrite, PigmentBuffer);
-        bufferNameLookup[PigmentBuffer]      = Config.PigmentsId;
+        bufferNameLookup[PigmentBuffer] = Config.PigmentsId;
         bufferNameLookup[PigmentBufferWrite] = Config.PigmentsWriteId;
         _pigmentDiffusion?.BindsBuffers();
         // PigmentReorder also reads/writes PigmentBuffer/PigmentBufferWrite (via
@@ -188,7 +191,7 @@ class FluidModel : IDisposable
     {
         _pressureForce = method switch
         {
-            PressureSolverMethod.Standard     => new WCPressureSolver(this, _SPHCompute, "WCSPressureSolver"),
+            PressureSolverMethod.Standard => new WCPressureSolver(this, _SPHCompute, "WCSPressureSolver"),
             PressureSolverMethod.NearPressure => new NearPressureSolver(this, _SPHCompute, "NearPressureSolver"),
             _ => throw new ArgumentOutOfRangeException()
         };
@@ -208,20 +211,20 @@ class FluidModel : IDisposable
     void CreateBuffers()
     {
         spatialHash = new SpatialHash(ParticleCount);
-        PositionsBuffer               = CreateStructuredBuffer<float3>(ParticleCount);
-        _predictedPositionsBuffer     = CreateStructuredBuffer<float3>(ParticleCount);
-        VelocitiesBuffer              = CreateStructuredBuffer<float3>(ParticleCount);
-        _densityBuffer                = CreateStructuredBuffer<float2>(ParticleCount);
+        PositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        _predictedPositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        VelocitiesBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        _densityBuffer = CreateStructuredBuffer<float2>(ParticleCount);
 
-        sortTarget_positionBuffer             = CreateStructuredBuffer<float3>(ParticleCount);
-        sortTarget_predictedPositionsBuffer   = CreateStructuredBuffer<float3>(ParticleCount);
-        sortTarget_velocityBuffer             = CreateStructuredBuffer<float3>(ParticleCount);
+        sortTarget_positionBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        sortTarget_predictedPositionsBuffer = CreateStructuredBuffer<float3>(ParticleCount);
+        sortTarget_velocityBuffer = CreateStructuredBuffer<float3>(ParticleCount);
 
         _debugBuffer = CreateStructuredBuffer<float>(2);
 
         // Pigment buffers — float4 per particle (linear RGBA)
-        PigmentBuffer            = CreateStructuredBuffer<Vector4>(ParticleCount);
-        PigmentBufferWrite       = CreateStructuredBuffer<Vector4>(ParticleCount);
+        PigmentBuffer = CreateStructuredBuffer<Vector4>(ParticleCount);
+        PigmentBufferWrite = CreateStructuredBuffer<Vector4>(ParticleCount);
         SortTarget_PigmentBuffer = CreateStructuredBuffer<Vector4>(ParticleCount);
     }
 
@@ -267,10 +270,10 @@ class FluidModel : IDisposable
     public void BindPigmentUniforms(PigmentSettings pigmentSettings, ParticleSettings particleSettings, float deltaTime)
     {
         if (_pigmentCompute == null) return;
-        _pigmentCompute.SetInt  (Config.ParticleCountId,   ParticleCount);
-        _pigmentCompute.SetFloat(Config.MassId,            particleSettings.mass);
+        _pigmentCompute.SetInt(Config.ParticleCountId, ParticleCount);
+        _pigmentCompute.SetFloat(Config.MassId, particleSettings.mass);
         _pigmentCompute.SetFloat(Config.SmoothingRadiusId, particleSettings.smoothingRadius);
-        _pigmentCompute.SetFloat(Config.DeltaTimeId,       deltaTime);
+        _pigmentCompute.SetFloat(Config.DeltaTimeId, deltaTime);
         if (pigmentSettings != null)
             _pigmentCompute.SetFloat(Config.DiffusionCoeffId, pigmentSettings.diffusionCoeff);
     }
@@ -413,8 +416,8 @@ class FluidModel : IDisposable
         spatialHash?.Release();
         spatialHash = null;
 
-        bufferNameLookup  = null;
-        _pigmentReorder   = null;
+        bufferNameLookup = null;
+        _pigmentReorder = null;
         _pigmentDiffusion = null;
     }
 

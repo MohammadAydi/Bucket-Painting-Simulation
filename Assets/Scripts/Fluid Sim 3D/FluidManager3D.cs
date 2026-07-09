@@ -125,7 +125,7 @@ public class FluidManager3D : MonoBehaviour
         // Simulation sub-steps
         for (int i = 0; i < iterationsPerFrame; i++)
         {
-            _fluidModel.Step();
+            _fluidModel.Step(canvasSurface);
             if (bucketCollision != null && bucketCollision.enabled)
             {
                 bucketCollision.ResolveCollisions();

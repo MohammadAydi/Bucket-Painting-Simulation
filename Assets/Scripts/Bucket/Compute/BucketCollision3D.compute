@@ -88,7 +88,6 @@ void ResolveWall(inout float3 pos, inout float3 vel, float radialDist, float cur
     float allowedInnerDist = currentInnerR - _ParticleRadius;
     float allowedOuterDist = currentOuterR + _ParticleRadius;
     
-    // هام: تم توسيع نطاق الالتقاط لإرجاع الجسيمات التي قد تخترق الدلو بسبب السرعة
     float catchRadius = currentOuterR + 1.0; 
 
     if (radialDist > allowedInnerDist && radialDist < catchRadius)
@@ -149,7 +148,6 @@ void ResolveBucketCollisions(uint3 id : SV_DispatchThreadID)
 
     float3 pos = mul(_BucketWorldToLocal, float4(_Positions[id.x], 1.0)).xyz;
     
-    // هام: تم توسيع نطاق الخروج المبكر (Early Exit) لضمان عدم تجاهل الجسيمات السريعة
     float absoluteMaxRadius = max(_TopRadius, _BottomRadius) + 5.0; 
     if (pos.y < -5.0 || pos.y > _BucketHeight + 5.0 || length(pos.xz) > absoluteMaxRadius) return;
 

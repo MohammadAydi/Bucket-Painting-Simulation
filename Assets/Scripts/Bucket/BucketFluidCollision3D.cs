@@ -99,7 +99,6 @@ public class BucketFluidCollision3D : MonoBehaviour
         if (_dividerCount > 0) _dividersBuffer.SetData(data);
     }
 
-    // دالة جديدة تستقبل الموضع والدوران اللحظي لتحديث مصفوفات التحويل
     public void ResolveCollisionsInterp(Vector3 interpPos, Quaternion interpRot)
     {
         if (fluidManager == null || bucket == null || bucketCollisionShader == null) return;
@@ -124,7 +123,6 @@ public class BucketFluidCollision3D : MonoBehaviour
         bucketCollisionShader.SetFloat("_ParticleRadius", particleRadius);
         bucketCollisionShader.SetFloat("_Restitution", restitution);
 
-        // بناء مصفوفات التحويل بناءً على الموضع المستوفى
         Matrix4x4 localToWorld = Matrix4x4.TRS(interpPos, interpRot, bucket.transform.lossyScale);
         Matrix4x4 worldToLocal = localToWorld.inverse;
 

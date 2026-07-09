@@ -27,7 +27,6 @@ public class BucketGenerator : MonoBehaviour
     private MeshFilter meshFilter;
     private Mesh bucketMesh;
 
-    // Surface tags: 0 = side wall, 1 = floor, 2 = divider
     private const float TAG_WALL = 0f;
     private const float TAG_FLOOR = 1f;
     private const float TAG_DIVIDER = 2f;

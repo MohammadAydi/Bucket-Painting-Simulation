@@ -557,8 +557,8 @@ public class SimulationHUD : MonoBehaviour
 
             Header("Rope — Structure (rebuild required)");
             _rope.StructSegments             = (int)Slider("Segments", _rope.StructSegments, 2, 80);
-            _rope.StructRopeLength           = Slider("Rope Length", _rope.StructRopeLength, 0.1f, 5f);
-            _rope.StructRopeWidth            = Slider("Rope Width", _rope.StructRopeWidth, 0.0005f, 0.05f);
+            _rope.StructRopeLength           = Slider("Rope Length", _rope.StructRopeLength, 0.1f, 25f);
+            _rope.StructRopeWidth            = Slider("Rope Width", _rope.StructRopeWidth, 0.05f, 2.5f);
             _rope.StructSubsteps             = (int)Slider("Substeps", _rope.StructSubsteps, 1, 8);
             _rope.StructConstraintIterations = (int)Slider("Constraint Iterations", _rope.StructConstraintIterations, 1, 80);
             _rope.StructTorsionIterations    = (int)Slider("Torsion Iterations", _rope.StructTorsionIterations, 1, 40);
@@ -575,11 +575,11 @@ public class SimulationHUD : MonoBehaviour
             Header("Pendulum (standalone, live)");
             _pendulum.LiveGravity         = Slider("Gravity", _pendulum.LiveGravity, 0f, 30f);
             _pendulum.LiveAirDensity      = Slider("Air Density", _pendulum.LiveAirDensity, 0f, 5f);
-            _pendulum.LivePivotFriction   = Slider("Pivot Friction", _pendulum.LivePivotFriction, 0f, 2f);
+            _pendulum.LivePivotFriction   = Slider("Pivot Friction", _pendulum.LivePivotFriction, 0f, 20f);
             _pendulum.LiveMass            = Slider("Bucket Mass", _pendulum.LiveMass, 0.01f, 20f);
-            _pendulum.LiveBucketRadius    = Slider("Bucket Radius", _pendulum.LiveBucketRadius, 0.01f, 2f);
-            _pendulum.LiveDragCoefficient = Slider("Drag Coefficient", _pendulum.LiveDragCoefficient, 0f, 3f);
-            _pendulum.LiveLength          = Slider("Rope Length", _pendulum.LiveLength, 0.1f, 5f);
+            _pendulum.LiveBucketRadius    = Slider("Bucket Radius", _pendulum.LiveBucketRadius, 0.01f, 20f);
+            _pendulum.LiveDragCoefficient = Slider("Drag Coefficient", _pendulum.LiveDragCoefficient, 0f, 30f);
+            _pendulum.LiveLength          = Slider("Rope Length", _pendulum.LiveLength, 0.1f, 50f);
 
             if (GUILayout.Button("Relaunch", GUILayout.Height(28)))
             {
@@ -648,9 +648,9 @@ public class SimulationHUD : MonoBehaviour
         }
         else
         {
-            scl.x = Slider("X", scl.x, 0.01f, 10f);
-            scl.y = Slider("Y", scl.y, 0.01f, 10f);
-            scl.z = Slider("Z", scl.z, 0.01f, 10f);
+            scl.x = Slider("X", scl.x, 0.01f, 100f);
+            scl.y = Slider("Y", scl.y, 0.01f, 100f);
+            scl.z = Slider("Z", scl.z, 0.01f, 100f);
         }
         _boxTarget.localScale = scl;
 
